@@ -1,0 +1,82 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Download Tesseract.js files (offline bundle)
+        run: |
+          mkdir -p www/tesseract/tessdata
+          # Tesseract.js core files
+          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" -o www/tesseract/tesseract.min.js
+          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js" -o www/tesseract/worker.min.js
+          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js" -o www/tesseract/tesseract-core.wasm.js
+          # Language files
+          curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/heb.traineddata.gz" -o www/tesseract/tessdata/heb.traineddata.gz
+          curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/eng.traineddata.gz" -o www/tesseract/tessdata/eng.traineddata.gz
+          echo "Tesseract files downloaded:"
+          ls -lh www/tesseract/
+          ls -lh www/tesseract/tessdata/
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync web assets to Android
+        run: npx cap sync android
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+
+      - name: Find APK
+        run: find android -name "*.apk" -type f
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: accident-reporter-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "דוחות תאונה v${{ github.run_number }}"
+          body: |
+            ## התקנה
+            1. הורד את קובץ `accident-reporter.apk`
+            2. פתח אותו בטלפון Android
+            3. אשר התקנה ממקורות לא ידועים
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          token: ${{ secrets.GITHUB_TOKEN }}

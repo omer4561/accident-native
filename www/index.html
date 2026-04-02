@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>דוחות תאונה</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --card: #161b22; --border: #30363d;
+      --accent: #1f6feb; --green: #238636; --red: #da3633;
+      --warn: #d29922; --text: #e6edf3; --muted: #8b949e;
+      --r: 12px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 40px; }
+
+    header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 18px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; }
+    header h1 { font-size: 17px; font-weight: 700; }
+    .badge { margin-right: auto; background: var(--green); color: #fff; font-size: 12px; padding: 2px 10px; border-radius: 20px; }
+
+    .tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border); }
+    .tab { flex: 1; padding: 11px 0; text-align: center; font-size: 13px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; transition: color .2s; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .page { display: none; padding: 14px; max-width: 500px; margin: 0 auto; }
+    .page.active { display: block; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; margin-bottom: 14px; }
+    .card h2 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+    /* photo slots */
+    .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .slot { border: 2px dashed var(--border); border-radius: var(--r); aspect-ratio: 3/4; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; overflow: hidden; transition: border-color .2s; }
+    .slot:active { border-color: var(--accent); }
+    .slot.has-photo { border-color: var(--green); border-style: solid; }
+    .slot img { width: 100%; height: 100%; object-fit: cover; border-radius: calc(var(--r) - 2px); }
+    .slot .lbl { font-size: 12px; color: var(--muted); margin-top: 6px; text-align: center; }
+    .slot .icon { font-size: 32px; }
+    .slot input { display: none; }
+    .slot .del { position: absolute; top: 6px; left: 6px; background: var(--red); border: none; border-radius: 50%; width: 24px; height: 24px; color: #fff; font-size: 13px; cursor: pointer; display: none; align-items: center; justify-content: center; }
+    .slot.has-photo .del { display: flex; }
+
+    /* buttons */
+    .btn { width: 100%; padding: 13px; border: none; border-radius: var(--r); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; margin-bottom: 8px; transition: opacity .15s, transform .1s; }
+    .btn:active { transform: scale(.97); opacity: .85; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-blue  { background: var(--accent); color: #fff; }
+    .btn-green { background: var(--green); color: #fff; }
+    .btn-gray  { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+
+    /* progress */
+    .prog { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 8px 0; display: none; }
+    .prog.show { display: block; }
+    .prog-bar { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+
+    /* log */
+    .log { font-size: 13px; min-height: 18px; margin-top: 6px; padding: 6px 0; }
+    .log.ok  { color: #3fb950; }
+    .log.err { color: var(--red); }
+    .log.inf { color: var(--warn); }
+
+    /* form fields */
+    .field { margin-bottom: 10px; }
+    .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .field input, .field select {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 12px; color: var(--text);
+      font-size: 14px; font-family: inherit;
+    }
+    .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+
+    /* report list */
+    .report-item { padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .report-item:last-child { border-bottom: none; }
+    .report-item .ico { font-size: 24px; }
+    .report-item .info { flex: 1; }
+    .report-item .info .title { font-size: 14px; font-weight: 600; }
+    .report-item .info .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .report-item .folder-tag { font-size: 11px; background: rgba(31,111,235,.15); color: var(--accent); padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+
+    .empty { text-align: center; padding: 40px 0; color: var(--muted); font-size: 14px; }
+    .empty span { font-size: 48px; display: block; margin-bottom: 10px; }
+
+    .setting-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .setting-row label { flex: 1; font-size: 14px; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:26px">🚗</span>
+  <h1>דוחות תאונה</h1>
+  <span class="badge" id="badge">0</span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="tab('add')">📸 הוספה</div>
+  <div class="tab" onclick="tab('list')">📁 דוחות</div>
+  <div class="tab" onclick="tab('cfg')">⚙️ הגדרות</div>
+</div>
+
+<!-- הוספה -->
+<div class="page active" id="pg-add">
+
+  <div class="card">
+    <h2>📷 צלם את הדוח</h2>
+    <div class="slots">
+      <div class="slot" id="s1" onclick="pickPhoto(1)">
+        <input type="file" id="f1" accept="image/*" capture="environment" onchange="gotPhoto(1,this)">
+        <button class="del" onclick="delPhoto(event,1)">✕</button>
+        <span class="icon">📷</span>
+        <span class="lbl">עמוד 1</span>
+      </div>
+      <div class="slot" id="s2" onclick="pickPhoto(2)">
+        <input type="file" id="f2" accept="image/*" capture="environment" onchange="gotPhoto(2,this)">
+        <button class="del" onclick="delPhoto(event,2)">✕</button>
+        <span class="icon">📷</span>
+        <span class="lbl">עמוד 2 (אופציונלי)</span>
+      </div>
+    </div>
+
+    <button class="btn btn-blue" id="ocrBtn" onclick="doOCR()" disabled>🔍 זהה נתונים</button>
+    <div class="prog" id="prog"><div class="prog-bar" id="progBar"></div></div>
+    <div class="log" id="logEl"></div>
+  </div>
+
+  <div class="card" id="formCard" style="display:none">
+    <h2>📋 נתוני הדוח — ערוך אם צריך</h2>
+    <div class="field"><label>לוחית רישוי</label><input id="F_plate" placeholder="לא זוהה"></div>
+    <div class="field"><label>תאריך התאונה</label><input type="date" id="F_date"></div>
+    <div class="field"><label>סוג תאונה</label>
+      <select id="F_type">
+        <option value="">לא ידוע</option>
+        <option value="צבא-צבא">צבא-צבא</option>
+        <option value="צבא-אזרח">צבא-אזרח</option>
+        <option value="צבא-עצמי">צבא-עצמי</option>
+      </select>
+    </div>
+    <div class="field"><label>שם נהג</label><input id="F_driver" placeholder="לא זוהה"></div>
+    <div class="field"><label>הערות</label><input id="F_notes" placeholder="אופציונלי"></div>
+    <button class="btn btn-green" onclick="save()">💾 שמור דוח לתיקייה</button>
+  </div>
+
+</div>
+
+<!-- רשימת דוחות -->
+<div class="page" id="pg-list">
+  <div class="card">
+    <h2>📁 תיקיית שמירה</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">
+      הקבצים נשמרים ב: <b id="saveDirLabel" style="color:var(--text)">טוען...</b>
+    </p>
+  </div>
+  <div class="card">
+    <h2>📄 כל הדוחות</h2>
+    <div id="reportList"><div class="empty"><span>📭</span>לא נשמרו דוחות עדיין</div></div>
+  </div>
+</div>
+
+<!-- הגדרות -->
+<div class="page" id="pg-cfg">
+  <div class="card">
+    <h2>⚙️ הגדרות שמירה</h2>
+    <div class="setting-row">
+      <label>פורמט שם קובץ</label>
+      <select id="nameFmt" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;" onchange="saveCfg()">
+        <option value="plate_date">לוחית_תאריך</option>
+        <option value="date_plate">תאריך_לוחית</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label>תיקיות לפי</label>
+      <select id="folderFmt" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;" onchange="saveCfg()">
+        <option value="ym">שנה/חודש</option>
+        <option value="y">שנה בלבד</option>
+        <option value="flat">ללא תת-תיקיות</option>
+      </select>
+    </div>
+  </div>
+  <div class="card">
+    <h2>🗑️ ניקוי</h2>
+    <button class="btn btn-gray" onclick="clearAll()">מחק את כל ההיסטוריה</button>
+  </div>
+  <div class="card">
+    <h2>ℹ️ גרסה</h2>
+    <p style="font-size:13px;color:var(--muted)">דוחות תאונה v1.0</p>
+  </div>
+</div>
+
+<!-- Tesseract — קבצים מקומיים בתוך האפליקציה -->
+<script src="tesseract/tesseract.min.js"></script>
+
+<script>
+// ================================================================
+// STATE
+// ================================================================
+let photos = {1:null, 2:null};
+const HEB = ['','ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+let reports = JSON.parse(localStorage.getItem('acc_reports')||'[]');
+let cfg     = JSON.parse(localStorage.getItem('acc_cfg')||'{"nameFmt":"plate_date","folderFmt":"ym"}');
+
+// Capacitor plugins
+let CapFS;
+(async () => {
+  if (window.Capacitor) {
+    const { Filesystem, Directory } = await import('./capacitor-filesystem.js').catch(()=>({}));
+    CapFS = { Filesystem, Directory };
+    document.getElementById('saveDirLabel').textContent = 'Documents/דוחות_תאונה';
+  } else {
+    document.getElementById('saveDirLabel').textContent = 'הורדות (Downloads)';
+  }
+  loadCfg();
+  renderList();
+  updateBadge();
+})();
+
+// ================================================================
+// TABS
+// ================================================================
+function tab(name) {
+  document.querySelectorAll('.tab').forEach((t,i)=> t.classList.toggle('active', ['add','list','cfg'][i]===name));
+  document.querySelectorAll('.page').forEach(p=> p.classList.remove('active'));
+  document.getElementById('pg-'+name).classList.add('active');
+  if (name==='list') renderList();
+}
+
+// ================================================================
+// PHOTOS
+// ================================================================
+function pickPhoto(n) {
+  if (!document.getElementById('s'+n).classList.contains('has-photo'))
+    document.getElementById('f'+n).click();
+}
+function gotPhoto(n, inp) {
+  const file = inp.files[0]; if (!file) return;
+  photos[n] = file;
+  const slot = document.getElementById('s'+n);
+  let img = slot.querySelector('img');
+  if (!img) { img = document.createElement('img'); slot.prepend(img); }
+  img.src = URL.createObjectURL(file);
+  slot.classList.add('has-photo');
+  slot.querySelector('.icon').style.display = 'none';
+  slot.querySelector('.lbl').style.display = 'none';
+  document.getElementById('ocrBtn').disabled = false;
+}
+function delPhoto(e, n) {
+  e.stopPropagation();
+  photos[n] = null;
+  const slot = document.getElementById('s'+n);
+  const img = slot.querySelector('img'); if (img) img.remove();
+  slot.classList.remove('has-photo');
+  slot.querySelector('.icon').style.display = '';
+  slot.querySelector('.lbl').style.display = '';
+  document.getElementById('f'+n).value = '';
+  if (!photos[1]) document.getElementById('ocrBtn').disabled = true;
+}
+
+// ================================================================
+// OCR
+// ================================================================
+async function doOCR() {
+  const btn = document.getElementById('ocrBtn');
+  btn.disabled = true;
+  log('⏳ מריץ זיהוי טקסט...', 'inf');
+  prog(5);
+
+  try {
+    const worker = await Tesseract.createWorker('heb+eng', 1, {
+      workerPath:  'tesseract/worker.min.js',
+      corePath:    'tesseract/tesseract-core.wasm.js',
+      langPath:    'tesseract/tessdata',
+      logger: m => { if (m.status==='recognizing text') prog(10 + m.progress*80|0); }
+    });
+
+    log('📄 מזהה עמוד 1...', 'inf');
+    const r1 = await worker.recognize(photos[1]);
+    let txt = r1.data.text;
+
+    if (photos[2]) {
+      log('📄 מזהה עמוד 2...', 'inf');
+      const r2 = await worker.recognize(photos[2]);
+      txt += '\n' + r2.data.text;
+    }
+    await worker.terminate();
+    prog(95);
+    fillForm(parse(txt));
+    prog(100);
+    log('✅ זיהוי הושלם — בדוק ותקן אם נדרש', 'ok');
+  } catch(err) {
+    log('⚠️ OCR נכשל — מלא ידנית', 'err');
+    fillForm({});
+  }
+
+  document.getElementById('formCard').style.display = 'block';
+  btn.disabled = false;
+}
+
+// ================================================================
+// PARSE
+// ================================================================
+function parse(txt) {
+  const d = {};
+  // תאריך
+  for (const rx of [/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})\b/, /\b(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})\b/]) {
+    const m = txt.match(rx);
+    if (m) {
+      try {
+        let dd,mo,yy;
+        if (m[1].length===4) { yy=+m[1]; mo=+m[2]; dd=+m[3]; } else { dd=+m[1]; mo=+m[2]; yy=+m[3]; }
+        if (mo>=1&&mo<=12&&dd>=1&&dd<=31&&yy>=2000&&yy<=2100) { d.date=`${yy}-${pad(mo)}-${pad(dd)}`; break; }
+      } catch(e){}
+    }
+  }
+  // לוחית
+  for (const rx of [/\b(\d{2,3}[-\s]\d{2,3}[-\s]\d{2,3})\b/, /\b(\d{7,8})\b/]) {
+    const m = txt.match(rx); if (m) { d.plate=m[1].trim(); break; }
+  }
+  // סוג תאונה
+  if (/צבא[\s\W]*צבא/.test(txt))    d.type='צבא-צבא';
+  else if (/צבא[\s\W]*אזרח/.test(txt)) d.type='צבא-אזרח';
+  else if (/צבא[\s\W]*עצמ/.test(txt))  d.type='צבא-עצמי';
+  // שם
+  for (const line of txt.split('\n')) {
+    if (/שם|נהג/.test(line)) {
+      const p = line.split(/[:\-–]/);
+      if (p[1]?.trim().length>=2) { d.driver=p[1].trim(); break; }
+    }
+  }
+  return d;
+}
+
+function fillForm(d) {
+  document.getElementById('F_plate').value  = d.plate  || '';
+  document.getElementById('F_date').value   = d.date   || today();
+  document.getElementById('F_type').value   = d.type   || '';
+  document.getElementById('F_driver').value = d.driver || '';
+}
+
+// ================================================================
+// SAVE
+// ================================================================
+async function save() {
+  const plate  = san(document.getElementById('F_plate').value  || 'לא_זוהה');
+  const dateV  = document.getElementById('F_date').value || today();
+  const type   = document.getElementById('F_type').value;
+  const driver = document.getElementById('F_driver').value;
+  const notes  = document.getElementById('F_notes').value;
+
+  const dt = new Date(dateV);
+  const y=dt.getFullYear(), mo=dt.getMonth()+1, dd=String(dt.getDate()).padStart(2,'0');
+  const dateTag = `${dd}_${pad(mo)}_${y}`;
+
+  const nf = cfg.nameFmt;
+  let base = nf==='plate_date' ? `${plate}_${dateTag}` : `${dateTag}_${plate}`;
+  if (type) base += `_${san(type)}`;
+
+  let folder = '';
+  if (cfg.folderFmt==='ym') folder = `${y}/${HEB[mo]}_${pad(mo)}_${y}`;
+  else if (cfg.folderFmt==='y') folder = `${y}`;
+
+  const saved = [];
+  for (const n of [1,2]) {
+    if (!photos[n]) continue;
+    const ext = photos[n].name.split('.').pop()||'jpg';
+    const fname = `${base}_עמוד${n}.${ext}`;
+    await writeFile(photos[n], fname, folder);
+    saved.push({ name: fname, folder: folder||'/' });
+  }
+
+  // מטא-דאטה
+  const meta = buildMeta({ plate, date: dateV, type, driver, notes });
+  await writeText(`${base}_פרטים.txt`, meta, folder);
+
+  const entry = { id:Date.now(), plate: document.getElementById('F_plate').value||'לא זוהה',
+    date: dateV, type, driver, folder: folder||'/', files: saved };
+  reports.unshift(entry);
+  if (reports.length>500) reports = reports.slice(0,500);
+  localStorage.setItem('acc_reports', JSON.stringify(reports));
+  updateBadge();
+
+  log(`✅ נשמר בתיקייה: ${folder||'/'}`, 'ok');
+  document.getElementById('formCard').style.display = 'none';
+  delPhoto({stopPropagation:()=>{}},1);
+  delPhoto({stopPropagation:()=>{}},2);
+  document.getElementById('F_notes').value='';
+}
+
+async function writeFile(file, name, folder) {
+  const buf = await file.arrayBuffer();
+  const blob = new Blob([buf], { type: file.type });
+
+  // Capacitor — שמירה לתיקיית Documents האמיתית
+  if (window.Capacitor?.isNativePlatform?.()) {
+    try {
+      const { Filesystem, Directory } = window.Capacitor.Plugins;
+      const path = folder ? `דוחות_תאונה/${folder}/${name}` : `דוחות_תאונה/${name}`;
+      const reader = new FileReader();
+      const b64 = await new Promise(res => {
+        reader.onload = e => res(e.target.result.split(',')[1]);
+        reader.readAsDataURL(blob);
+      });
+      await Filesystem.writeFile({ path, data: b64, directory: Directory.Documents, recursive: true });
+      return;
+    } catch(e) { console.warn('Capacitor write failed:', e); }
+  }
+
+  // Browser fallback — הורדה
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function writeText(name, content, folder) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  if (window.Capacitor?.isNativePlatform?.()) {
+    try {
+      const { Filesystem, Directory } = window.Capacitor.Plugins;
+      const path = folder ? `דוחות_תאונה/${folder}/${name}` : `דוחות_תאונה/${name}`;
+      await Filesystem.writeFile({ path, data: btoa(unescape(encodeURIComponent(content))), directory: Directory.Documents, recursive: true });
+      return;
+    } catch(e) {}
+  }
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function buildMeta(d) {
+  return [
+    '=== פרטי דוח תאונה ===',
+    d.plate   ? `לוחית רישוי: ${d.plate}`   : '',
+    d.date    ? `תאריך: ${fmtDate(d.date)}`  : '',
+    d.type    ? `סוג תאונה: ${d.type}`       : '',
+    d.driver  ? `נהג: ${d.driver}`           : '',
+    d.notes   ? `הערות: ${d.notes}`         : '',
+    '',
+    `נוצר: ${new Date().toLocaleString('he-IL')}`,
+  ].filter(l=>l!=='' || l==='').join('\n');
+}
+
+// ================================================================
+// LIST
+// ================================================================
+function renderList() {
+  const el = document.getElementById('reportList');
+  if (!reports.length) {
+    el.innerHTML = '<div class="empty"><span>📭</span>לא נשמרו דוחות עדיין</div>';
+    return;
+  }
+  el.innerHTML = reports.map(r => `
+    <div class="report-item">
+      <span class="ico">📄</span>
+      <div class="info">
+        <div class="title">${r.plate} ${r.type ? '· ' + r.type : ''}</div>
+        <div class="sub">📅 ${fmtDate(r.date)} ${r.driver ? '· ' + r.driver : ''}</div>
+      </div>
+      <span class="folder-tag">📁 ${r.folder}</span>
+    </div>`).join('');
+}
+
+// ================================================================
+// CONFIG
+// ================================================================
+function loadCfg() {
+  document.getElementById('nameFmt').value  = cfg.nameFmt   || 'plate_date';
+  document.getElementById('folderFmt').value = cfg.folderFmt || 'ym';
+}
+function saveCfg() {
+  cfg.nameFmt   = document.getElementById('nameFmt').value;
+  cfg.folderFmt = document.getElementById('folderFmt').value;
+  localStorage.setItem('acc_cfg', JSON.stringify(cfg));
+}
+function clearAll() {
+  if (!confirm('למחוק את כל ההיסטוריה?')) return;
+  reports = []; localStorage.removeItem('acc_reports');
+  updateBadge(); renderList();
+}
+
+// ================================================================
+// UTILS
+// ================================================================
+function san(s){ return (s||'').replace(/[^\w\u0590-\u05FF\-]/g,'_').slice(0,30).replace(/^_+|_+$/g,'')||'unknown'; }
+function pad(n){ return String(n).padStart(2,'0'); }
+function today(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(iso){ if (!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+function updateBadge(){ document.getElementById('badge').textContent = reports.length + ' דוחות'; }
+function log(msg,cls=''){ const e=document.getElementById('logEl'); e.textContent=msg; e.className='log '+cls; }
+function prog(pct){
+  const w=document.getElementById('prog'), b=document.getElementById('progBar');
+  w.classList.add('show'); b.style.width=pct+'%';
+  if(pct>=100) setTimeout(()=>w.classList.remove('show'),800);
+}
+
+updateBadge();
+</script>
+</body>
+</html>

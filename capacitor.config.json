@@ -1,0 +1,16 @@
+{
+  "appId": "com.accidentreporter.app",
+  "appName": "דוחות תאונה",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "Camera": {
+      "permissions": ["camera"]
+    },
+    "Filesystem": {
+      "permissions": ["publicStorage"]
+    }
+  }
+}
