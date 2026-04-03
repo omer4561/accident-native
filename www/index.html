@@ -265,11 +265,16 @@ async function doOCR() {
   prog(5);
 
   try {
-    const worker = await Tesseract.createWorker('heb+eng', 1, {
+    const worker = await Tesseract.createWorker('heb', 1, {
       workerPath:  'tesseract/worker.min.js',
       corePath:    'tesseract/tesseract-core.wasm.js',
       langPath:    'tesseract/tessdata',
       logger: m => { if (m.status==='recognizing text') prog(10 + m.progress*80|0); }
+    });
+
+    await worker.setParameters({
+      tessedit_ocr_engine_mode: '1',
+      tessedit_pageseg_mode: '6',
     });
 
     log('📄 מזהה עמוד 1...', 'inf');
