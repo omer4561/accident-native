@@ -337,7 +337,7 @@
   </div>
   <div class="thumbs-row" id="thumbsRow"></div>
 
-  <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.bmp">
+  <input type="file" id="fileInput" multiple accept="image/*">
 
   <button class="btn btn-primary" id="processBtn" disabled onclick="startProcessing()">
     עבד תמונות
@@ -627,7 +627,11 @@
 
   // --- Main processing ---
   async function startProcessing() {
-    if (!selectedFiles.length || !workerReady) return;
+    if (!selectedFiles.length) return;
+    if (!ocrWorker) {
+      alert('מנוע OCR עדיין נטען — נסה שוב בעוד שנייה');
+      return;
+    }
 
     document.getElementById('processBtn').disabled = true;
     document.getElementById('processBtn').textContent = 'מעבד...';
@@ -710,22 +714,26 @@
       groups[plate].push(r);
     }
 
+    // Build groupsData FIRST so onclick handlers can access it
+    window.groupsData = {};
     for (const [plate, items] of Object.entries(groups)) {
-      const multiPage = items.length > 1;
-      const card = document.createElement('div');
-      card.className = 'group-card';
-
-      // Pick best data across all pages (first non-null wins)
       const merged = items.reduce((acc, item) => ({
         date: acc.date || item.data.date,
         license_plate: acc.license_plate || item.data.license_plate,
         driver_name: acc.driver_name || item.data.driver_name
       }), { date: null, license_plate: null, driver_name: null });
+      window.groupsData[plate] = items.map(item => ({ ...item, data: merged }));
+    }
+
+    for (const [plate, items] of Object.entries(window.groupsData)) {
+      const multiPage = items.length > 1;
+      const merged = items[0].data;
+      const card = document.createElement('div');
+      card.className = 'group-card';
 
       const dateDisplay = merged.date || 'תאריך לא זוהה';
       const driver = merged.driver_name || 'לא זוהה';
 
-      // "Save all" button — always shown (one page or many)
       const saveAllId = `saveBtn_${plate.replace(/[^a-zA-Z0-9]/g,'_')}`;
       const saveAllBtn = `<button class="page-btn-all" id="${saveAllId}"
           onclick="saveGroup('${plate}', this)">
@@ -733,15 +741,18 @@
           <small style="font-size:10px;opacity:0.85">Documents/דוחות_תאונה/</small>
         </button>`;
 
-      // Per-page individual save buttons
       let pagesHtml = '';
       items.forEach((item, idx) => {
         const pageNum = idx + 1;
         const ext = '.' + item.file.name.split('.').pop().toLowerCase();
         const filename = buildFilename(merged, pageNum, multiPage, ext);
         pagesHtml += `
-          <button class="page-btn" onclick="saveFile(selectedFiles[${item.index}], '${filename}', '').then(p => this.textContent='✅ ' + ${pageNum})">
-            💾 עמוד ${pageNum}<br><small style="font-size:10px;opacity:0.8">${filename}</small>
+          <button class="page-btn"
+            onclick="saveFile(selectedFiles[${item.index}],'${filename}','')
+              .then(()=>{ this.textContent='✅ עמוד ${pageNum}'; })
+              .catch(()=>{ this.textContent='❌ שגיאה'; })">
+            💾 עמוד ${pageNum}<br>
+            <small style="font-size:10px;opacity:0.8">${filename}</small>
           </button>`;
       });
 
@@ -758,20 +769,6 @@
         </div>
       `;
       resultsList.appendChild(card);
-    }
-
-    // Expose groups to downloadAll onclick handlers
-    window.groupsData = {};
-    for (const [plate, items] of Object.entries(groups)) {
-      const merged = items.reduce((acc, item) => ({
-        date: acc.date || item.data.date,
-        license_plate: acc.license_plate || item.data.license_plate,
-        driver_name: acc.driver_name || item.data.driver_name
-      }), { date: null, license_plate: null, driver_name: null });
-      window.groupsData[plate] = items.map((item, idx) => ({
-        ...item,
-        data: merged
-      }));
     }
 
     errors.forEach(e => {
