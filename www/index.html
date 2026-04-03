@@ -29,16 +29,16 @@
     .card h2 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
 
     /* photo slots */
-    .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-    .slot { border: 2px dashed var(--border); border-radius: var(--r); aspect-ratio: 3/4; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; overflow: hidden; transition: border-color .2s; }
-    .slot:active { border-color: var(--accent); }
-    .slot.has-photo { border-color: var(--green); border-style: solid; }
-    .slot img { width: 100%; height: 100%; object-fit: cover; border-radius: calc(var(--r) - 2px); }
-    .slot .lbl { font-size: 12px; color: var(--muted); margin-top: 6px; text-align: center; }
-    .slot .icon { font-size: 32px; }
-    .slot input { display: none; }
-    .slot .del { position: absolute; top: 6px; left: 6px; background: var(--red); border: none; border-radius: 50%; width: 24px; height: 24px; color: #fff; font-size: 13px; cursor: pointer; display: none; align-items: center; justify-content: center; }
-    .slot.has-photo .del { display: flex; }
+    .drop-zone { border: 2px dashed var(--border); border-radius: var(--r); padding: 24px 16px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; margin-bottom: 12px; }
+    .drop-zone:active, .drop-zone.drag { border-color: var(--accent); background: rgba(31,111,235,.06); }
+    .drop-zone .dz-icon { font-size: 36px; margin-bottom: 6px; }
+    .drop-zone .dz-text { font-size: 14px; color: var(--muted); }
+    .drop-zone .dz-count { font-size: 13px; color: var(--green); margin-top: 4px; font-weight: 600; }
+    .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .thumb { position: relative; aspect-ratio: 3/4; border-radius: 8px; overflow: hidden; border: 2px solid var(--green); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb .del { position: absolute; top: 3px; left: 3px; background: var(--red); border: none; border-radius: 50%; width: 22px; height: 22px; color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .thumb .num { position: absolute; bottom: 3px; right: 3px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 1px 5px; border-radius: 6px; }
 
     /* buttons */
     .btn { width: 100%; padding: 13px; border: none; border-radius: var(--r); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; margin-bottom: 8px; transition: opacity .15s, transform .1s; }
@@ -104,21 +104,13 @@
 
   <div class="card">
     <h2>📷 צלם את הדוח</h2>
-    <div class="slots">
-      <div class="slot" id="s1" onclick="pickPhoto(1)">
-        <input type="file" id="f1" accept="image/*" onchange="gotPhoto(1,this)">
-        <button class="del" onclick="delPhoto(event,1)">✕</button>
-        <span class="icon">📷</span>
-        <span class="lbl">עמוד 1</span>
-      </div>
-      <div class="slot" id="s2" onclick="pickPhoto(2)">
-        <input type="file" id="f2" accept="image/*" onchange="gotPhoto(2,this)">
-        <button class="del" onclick="delPhoto(event,2)">✕</button>
-        <span class="icon">📷</span>
-        <span class="lbl">עמוד 2 (אופציונלי)</span>
-      </div>
+    <input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="gotPhotos(this)">
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="dz-icon">📷</div>
+      <div class="dz-text">לחץ לבחירת תמונות (אחת או יותר)</div>
+      <div class="dz-count" id="dzCount"></div>
     </div>
-
+    <div class="thumbs" id="thumbs"></div>
     <button class="btn btn-blue" id="ocrBtn" onclick="doOCR()" disabled>🔍 זהה נתונים</button>
     <div class="prog" id="prog"><div class="prog-bar" id="progBar"></div></div>
     <div class="log" id="logEl"></div>
@@ -194,7 +186,7 @@
 // ================================================================
 // STATE
 // ================================================================
-let photos = {1:null, 2:null};
+let photos = [];
 const HEB = ['','ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 let reports = JSON.parse(localStorage.getItem('acc_reports')||'[]');
 let cfg     = JSON.parse(localStorage.getItem('acc_cfg')||'{"nameFmt":"plate_date","folderFmt":"ym"}');
@@ -227,37 +219,51 @@ function tab(name) {
 // ================================================================
 // PHOTOS
 // ================================================================
-function pickPhoto(n) {
-  if (!document.getElementById('s'+n).classList.contains('has-photo'))
-    document.getElementById('f'+n).click();
-}
-function gotPhoto(n, inp) {
-  const file = inp.files[0]; if (!file) return;
-  photos[n] = file;
-  const slot = document.getElementById('s'+n);
-  let img = slot.querySelector('img');
-  if (!img) { img = document.createElement('img'); slot.prepend(img); }
-  img.src = URL.createObjectURL(file);
-  slot.classList.add('has-photo');
-  slot.querySelector('.icon').style.display = 'none';
-  slot.querySelector('.lbl').style.display = 'none';
+function gotPhotos(inp) {
+  const files = Array.from(inp.files);
+  if (!files.length) return;
+  photos = photos.concat(files);
+  renderThumbs();
   document.getElementById('ocrBtn').disabled = false;
+  document.getElementById('fileInput').value = '';
 }
-function delPhoto(e, n) {
+
+function delPhoto(e, idx) {
   e.stopPropagation();
-  photos[n] = null;
-  const slot = document.getElementById('s'+n);
-  const img = slot.querySelector('img'); if (img) img.remove();
-  slot.classList.remove('has-photo');
-  slot.querySelector('.icon').style.display = '';
-  slot.querySelector('.lbl').style.display = '';
-  document.getElementById('f'+n).value = '';
-  if (!photos[1]) document.getElementById('ocrBtn').disabled = true;
+  photos.splice(idx, 1);
+  renderThumbs();
+  if (!photos.length) document.getElementById('ocrBtn').disabled = true;
+}
+
+function renderThumbs() {
+  const container = document.getElementById('thumbs');
+  const count = document.getElementById('dzCount');
+  count.textContent = photos.length ? `${photos.length} תמונות נבחרו` : '';
+  container.innerHTML = photos.map((f, i) => `
+    <div class="thumb">
+      <img src="${URL.createObjectURL(f)}">
+      <button class="del" onclick="delPhoto(event,${i})">✕</button>
+      <span class="num">עמ' ${i+1}</span>
+    </div>`).join('');
 }
 
 // ================================================================
 // OCR
 // ================================================================
+async function resizeForOCR(file, maxPx = 1400) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = img.width * scale; c.height = img.height * scale;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(b => res(b), 'image/jpeg', 0.85);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 async function doOCR() {
   const btn = document.getElementById('ocrBtn');
   btn.disabled = true;
@@ -266,30 +272,27 @@ async function doOCR() {
 
   try {
     const worker = await Tesseract.createWorker('heb', 1, {
-      workerPath:  'tesseract/worker.min.js',
-      corePath:    'tesseract/tesseract-core.wasm.js',
-      langPath:    'tesseract/tessdata',
-      logger: m => { if (m.status==='recognizing text') prog(10 + m.progress*80|0); }
+      workerPath: 'tesseract/worker.min.js',
+      corePath:   'tesseract/tesseract-core.wasm.js',
+      langPath:   'tesseract/tessdata',
+      logger: m => {
+        if (m.status === 'recognizing text') prog(20 + m.progress * 60 | 0);
+      }
     });
+    await worker.setParameters({ tessedit_pageseg_mode: '6' });
 
-    await worker.setParameters({
-      tessedit_ocr_engine_mode: '1',
-      tessedit_pageseg_mode: '6',
-    });
-
-    log('📄 מזהה עמוד 1...', 'inf');
-    const r1 = await worker.recognize(photos[1]);
-    let txt = r1.data.text;
-
-    if (photos[2]) {
-      log('📄 מזהה עמוד 2...', 'inf');
-      const r2 = await worker.recognize(photos[2]);
-      txt += '\n' + r2.data.text;
+    let txt = '';
+    for (let i = 0; i < photos.length; i++) {
+      log(`📄 מזהה עמוד ${i+1} מתוך ${photos.length}...`, 'inf');
+      prog(10 + (i / photos.length) * 10 | 0);
+      const resized = await resizeForOCR(photos[i]);
+      const r = await worker.recognize(resized);
+      txt += r.data.text + '\n';
     }
+
     await worker.terminate();
-    prog(95);
-    fillForm(parse(txt));
     prog(100);
+    fillForm(parse(txt));
     log('✅ זיהוי הושלם — בדוק ותקן אם נדרש', 'ok');
   } catch(err) {
     log('⚠️ OCR נכשל — מלא ידנית', 'err');
@@ -364,11 +367,10 @@ async function save() {
   else if (cfg.folderFmt==='y') folder = `${y}`;
 
   const saved = [];
-  for (const n of [1,2]) {
-    if (!photos[n]) continue;
-    const ext = photos[n].name.split('.').pop()||'jpg';
-    const fname = `${base}_עמוד${n}.${ext}`;
-    await writeFile(photos[n], fname, folder);
+  for (let i = 0; i < photos.length; i++) {
+    const ext = photos[i].name.split('.').pop()||'jpg';
+    const fname = `${base}_עמוד${i+1}.${ext}`;
+    await writeFile(photos[i], fname, folder);
     saved.push({ name: fname, folder: folder||'/' });
   }
 
@@ -385,9 +387,10 @@ async function save() {
 
   log(`✅ נשמר בתיקייה: ${folder||'/'}`, 'ok');
   document.getElementById('formCard').style.display = 'none';
-  delPhoto({stopPropagation:()=>{}},1);
-  delPhoto({stopPropagation:()=>{}},2);
-  document.getElementById('F_notes').value='';
+  photos = [];
+  renderThumbs();
+  document.getElementById('ocrBtn').disabled = true;
+  document.getElementById('F_notes').value = '';
 }
 
 async function writeFile(file, name, folder) {
