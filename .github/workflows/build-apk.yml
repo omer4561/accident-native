@@ -60,6 +60,9 @@ jobs:
 
       - name: Patch build.gradle — SDK 35 + release signing
         run: |
+          echo "=== build.gradle BEFORE patch ==="
+          cat android/app/build.gradle
+          echo "=== END ==="
           python3 << 'EOF'
           import re
 
