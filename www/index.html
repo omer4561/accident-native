@@ -1,507 +1,604 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html dir="rtl" lang="he">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
+  <script src="tesseract/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0d1117; --card: #161b22; --border: #30363d;
-      --accent: #1f6feb; --green: #238636; --red: #da3633;
-      --warn: #d29922; --text: #e6edf3; --muted: #8b949e;
-      --r: 12px;
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f2f5;
+      color: #222;
+      min-height: 100vh;
+      direction: rtl;
     }
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 40px; }
 
-    header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 18px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; }
-    header h1 { font-size: 17px; font-weight: 700; }
-    .badge { margin-right: auto; background: var(--green); color: #fff; font-size: 12px; padding: 2px 10px; border-radius: 20px; }
-
-    .tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border); }
-    .tab { flex: 1; padding: 11px 0; text-align: center; font-size: 13px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; transition: color .2s; }
-    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-    .page { display: none; padding: 14px; max-width: 500px; margin: 0 auto; }
-    .page.active { display: block; }
-
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; margin-bottom: 14px; }
-    .card h2 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
-
-    /* photo slots */
-    .drop-zone { border: 2px dashed var(--border); border-radius: var(--r); padding: 24px 16px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; margin-bottom: 12px; }
-    .drop-zone:active, .drop-zone.drag { border-color: var(--accent); background: rgba(31,111,235,.06); }
-    .drop-zone .dz-icon { font-size: 36px; margin-bottom: 6px; }
-    .drop-zone .dz-text { font-size: 14px; color: var(--muted); }
-    .drop-zone .dz-count { font-size: 13px; color: var(--green); margin-top: 4px; font-weight: 600; }
-    .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; margin-bottom: 12px; }
-    .thumb { position: relative; aspect-ratio: 3/4; border-radius: 8px; overflow: hidden; border: 2px solid var(--green); }
-    .thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .thumb .del { position: absolute; top: 3px; left: 3px; background: var(--red); border: none; border-radius: 50%; width: 22px; height: 22px; color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-    .thumb .num { position: absolute; bottom: 3px; right: 3px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 1px 5px; border-radius: 6px; }
-
-    /* buttons */
-    .btn { width: 100%; padding: 13px; border: none; border-radius: var(--r); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; margin-bottom: 8px; transition: opacity .15s, transform .1s; }
-    .btn:active { transform: scale(.97); opacity: .85; }
-    .btn:disabled { opacity: .4; cursor: not-allowed; }
-    .btn-blue  { background: var(--accent); color: #fff; }
-    .btn-green { background: var(--green); color: #fff; }
-    .btn-gray  { background: var(--card); color: var(--text); border: 1px solid var(--border); }
-
-    /* progress */
-    .prog { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 8px 0; display: none; }
-    .prog.show { display: block; }
-    .prog-bar { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
-
-    /* log */
-    .log { font-size: 13px; min-height: 18px; margin-top: 6px; padding: 6px 0; }
-    .log.ok  { color: #3fb950; }
-    .log.err { color: var(--red); }
-    .log.inf { color: var(--warn); }
-
-    /* form fields */
-    .field { margin-bottom: 10px; }
-    .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-    .field input, .field select {
-      width: 100%; background: var(--bg); border: 1px solid var(--border);
-      border-radius: 8px; padding: 9px 12px; color: var(--text);
-      font-size: 14px; font-family: inherit;
+    header {
+      background: #1a73e8;
+      color: white;
+      padding: 16px 20px;
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
-    .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
 
-    /* report list */
-    .report-item { padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-    .report-item:last-child { border-bottom: none; }
-    .report-item .ico { font-size: 24px; }
-    .report-item .info { flex: 1; }
-    .report-item .info .title { font-size: 14px; font-weight: 600; }
-    .report-item .info .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .report-item .folder-tag { font-size: 11px; background: rgba(31,111,235,.15); color: var(--accent); padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+    .container {
+      padding: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
 
-    .empty { text-align: center; padding: 40px 0; color: var(--muted); font-size: 14px; }
-    .empty span { font-size: 48px; display: block; margin-bottom: 10px; }
+    .upload-area {
+      background: white;
+      border: 2px dashed #1a73e8;
+      border-radius: 12px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      margin-bottom: 16px;
+      transition: background 0.2s;
+      user-select: none;
+    }
+    .upload-area:active { background: #e8f0fe; }
+    .upload-area.has-files { border-color: #34a853; background: #f0faf3; }
+    .upload-area .icon { font-size: 48px; margin-bottom: 8px; }
+    .upload-area .label { font-size: 16px; font-weight: bold; color: #1a73e8; }
+    .upload-area.has-files .label { color: #1e8e3e; }
+    .upload-area .hint { font-size: 13px; color: #666; margin-top: 4px; }
+    .upload-area .count-badge {
+      display: inline-block;
+      background: #34a853;
+      color: white;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 14px;
+      font-weight: bold;
+      margin-top: 8px;
+    }
 
-    .setting-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .setting-row label { flex: 1; font-size: 14px; color: var(--muted); }
+    .thumbs-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .thumb-item {
+      width: 64px;
+      height: 64px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid #ddd;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .thumb-item img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb-more {
+      width: 64px;
+      height: 64px;
+      border-radius: 8px;
+      background: #e8f0fe;
+      border: 2px solid #1a73e8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: bold;
+      color: #1a73e8;
+      flex-shrink: 0;
+    }
+
+    #fileInput { display: none; }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-bottom: 12px;
+    }
+    .btn-primary { background: #1a73e8; color: white; }
+    .btn-primary:disabled { background: #aaa; cursor: default; }
+    .btn-success { background: #34a853; color: white; }
+    .btn-sm {
+      display: inline-block;
+      width: auto;
+      padding: 8px 14px;
+      font-size: 13px;
+      margin-bottom: 0;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .section.visible { display: block; }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #555;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+    }
+
+    .file-progress { margin-bottom: 10px; }
+    .file-name {
+      font-size: 13px;
+      color: #333;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .progress-bar-bg {
+      background: #e0e0e0;
+      border-radius: 6px;
+      height: 8px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      background: #1a73e8;
+      height: 100%;
+      border-radius: 6px;
+      transition: width 0.2s;
+      width: 0%;
+    }
+    .progress-status {
+      font-size: 11px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .group-card {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      border-right: 4px solid #1a73e8;
+    }
+    .group-plate {
+      font-size: 18px;
+      font-weight: bold;
+      color: #1a73e8;
+      margin-bottom: 6px;
+    }
+    .group-meta {
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 10px;
+    }
+    .group-meta span { margin-left: 12px; }
+
+    .pages-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .page-btn {
+      flex: 1;
+      min-width: 110px;
+      padding: 10px;
+      background: #e8f0fe;
+      color: #1a73e8;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+      font-weight: bold;
+    }
+    .page-btn:active { background: #c5d9fb; }
+    .page-btn-all {
+      flex: 2;
+      min-width: 140px;
+      padding: 10px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+      font-weight: bold;
+    }
+    .page-btn-all:active { background: #1557b0; }
+
+    .error-tag {
+      background: #fce8e6;
+      color: #c5221f;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .summary-bar {
+      background: #e6f4ea;
+      border-radius: 10px;
+      padding: 12px 16px;
+      text-align: center;
+      font-size: 15px;
+      font-weight: bold;
+      color: #1e8e3e;
+      margin-bottom: 12px;
+    }
+
+    .worker-status {
+      font-size: 12px;
+      color: #aaa;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .worker-status.ready { color: #34a853; }
   </style>
 </head>
 <body>
 
-<header>
-  <span style="font-size:26px">🚗</span>
-  <h1>דוחות תאונה</h1>
-  <span class="badge" id="badge">0</span>
-</header>
+<header>🚗 ארגון דוחות תאונה</header>
 
-<div class="tabs">
-  <div class="tab active" onclick="tab('add')">📸 הוספה</div>
-  <div class="tab" onclick="tab('list')">📁 דוחות</div>
-  <div class="tab" onclick="tab('cfg')">⚙️ הגדרות</div>
-</div>
+<div class="container">
 
-<!-- הוספה -->
-<div class="page active" id="pg-add">
+  <div class="worker-status" id="workerStatus">⏳ מכין מנוע זיהוי...</div>
 
-  <div class="card">
-    <h2>📷 צלם את הדוח</h2>
-    <input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="gotPhotos(this)">
-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-      <div class="dz-icon">📷</div>
-      <div class="dz-text">לחץ לבחירת תמונות (אחת או יותר)</div>
-      <div class="dz-count" id="dzCount"></div>
-    </div>
-    <div class="thumbs" id="thumbs"></div>
-    <button class="btn btn-blue" id="ocrBtn" onclick="doOCR()" disabled>🔍 זהה נתונים</button>
-    <div class="prog" id="prog"><div class="prog-bar" id="progBar"></div></div>
-    <div class="log" id="logEl"></div>
+  <!-- Upload -->
+  <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+    <div class="icon">📸</div>
+    <div class="label" id="uploadLabel">בחר תמונות לעיבוד</div>
+    <div class="hint">ניתן לבחור מספר תמונות בבת אחת — כולן יקובצו אוטומטית</div>
+    <div id="countBadge"></div>
+  </div>
+  <div class="thumbs-row" id="thumbsRow"></div>
+
+  <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.bmp">
+
+  <button class="btn btn-primary" id="processBtn" disabled onclick="startProcessing()">
+    עבד תמונות
+  </button>
+
+  <!-- Progress -->
+  <div class="section" id="progressSection">
+    <div class="section-title">⏳ עיבוד בתהליך</div>
+    <div id="progressList"></div>
   </div>
 
-  <div class="card" id="formCard" style="display:none">
-    <h2>📋 נתוני הדוח — ערוך אם צריך</h2>
-    <div class="field"><label>לוחית רישוי</label><input id="F_plate" placeholder="לא זוהה"></div>
-    <div class="field"><label>תאריך התאונה</label><input type="date" id="F_date"></div>
-    <div class="field"><label>סוג תאונה</label>
-      <select id="F_type">
-        <option value="">לא ידוע</option>
-        <option value="צבא-צבא">צבא-צבא</option>
-        <option value="צבא-אזרח">צבא-אזרח</option>
-        <option value="צבא-עצמי">צבא-עצמי</option>
-      </select>
-    </div>
-    <div class="field"><label>שם נהג</label><input id="F_driver" placeholder="לא זוהה"></div>
-    <div class="field"><label>הערות</label><input id="F_notes" placeholder="אופציונלי"></div>
-    <button class="btn btn-green" onclick="save()">💾 שמור דוח לתיקייה</button>
+  <!-- Results -->
+  <div class="section" id="resultsSection">
+    <div class="section-title">✅ תוצאות</div>
+    <div id="summaryBar" class="summary-bar"></div>
+    <div id="resultsList"></div>
+    <div id="errorsList"></div>
   </div>
 
 </div>
-
-<!-- רשימת דוחות -->
-<div class="page" id="pg-list">
-  <div class="card">
-    <h2>📁 תיקיית שמירה</h2>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">
-      הקבצים נשמרים ב: <b id="saveDirLabel" style="color:var(--text)">טוען...</b>
-    </p>
-  </div>
-  <div class="card">
-    <h2>📄 כל הדוחות</h2>
-    <div id="reportList"><div class="empty"><span>📭</span>לא נשמרו דוחות עדיין</div></div>
-  </div>
-</div>
-
-<!-- הגדרות -->
-<div class="page" id="pg-cfg">
-  <div class="card">
-    <h2>⚙️ הגדרות שמירה</h2>
-    <div class="setting-row">
-      <label>פורמט שם קובץ</label>
-      <select id="nameFmt" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;" onchange="saveCfg()">
-        <option value="plate_date">לוחית_תאריך</option>
-        <option value="date_plate">תאריך_לוחית</option>
-      </select>
-    </div>
-    <div class="setting-row">
-      <label>תיקיות לפי</label>
-      <select id="folderFmt" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;" onchange="saveCfg()">
-        <option value="ym">שנה/חודש</option>
-        <option value="y">שנה בלבד</option>
-        <option value="flat">ללא תת-תיקיות</option>
-      </select>
-    </div>
-  </div>
-  <div class="card">
-    <h2>🗑️ ניקוי</h2>
-    <button class="btn btn-gray" onclick="clearAll()">מחק את כל ההיסטוריה</button>
-  </div>
-  <div class="card">
-    <h2>ℹ️ גרסה</h2>
-    <p style="font-size:13px;color:var(--muted)">דוחות תאונה v1.0</p>
-  </div>
-</div>
-
-<!-- Tesseract — קבצים מקומיים בתוך האפליקציה -->
-<script src="tesseract/tesseract.min.js"></script>
 
 <script>
-// ================================================================
-// STATE
-// ================================================================
-let photos = [];
-const HEB = ['','ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-let reports = JSON.parse(localStorage.getItem('acc_reports')||'[]');
-let cfg     = JSON.parse(localStorage.getItem('acc_cfg')||'{"nameFmt":"plate_date","folderFmt":"ym"}');
+  const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
+  const MAX_SIZE = 10 * 1024 * 1024;
+  const MAX_OCR_PX = 1400;
 
-// Capacitor plugins
-let CapFS;
-(async () => {
-  if (window.Capacitor) {
-    const { Filesystem, Directory } = await import('./capacitor-filesystem.js').catch(()=>({}));
-    CapFS = { Filesystem, Directory };
-    document.getElementById('saveDirLabel').textContent = 'Documents/דוחות_תאונה';
-  } else {
-    document.getElementById('saveDirLabel').textContent = 'הורדות (Downloads)';
-  }
-  loadCfg();
-  renderList();
-  updateBadge();
-})();
+  let selectedFiles = [];
+  let ocrWorker = null;
+  let workerReady = false;
 
-// ================================================================
-// TABS
-// ================================================================
-function tab(name) {
-  document.querySelectorAll('.tab').forEach((t,i)=> t.classList.toggle('active', ['add','list','cfg'][i]===name));
-  document.querySelectorAll('.page').forEach(p=> p.classList.remove('active'));
-  document.getElementById('pg-'+name).classList.add('active');
-  if (name==='list') renderList();
-}
-
-// ================================================================
-// PHOTOS
-// ================================================================
-function gotPhotos(inp) {
-  const files = Array.from(inp.files);
-  if (!files.length) return;
-  photos = photos.concat(files);
-  renderThumbs();
-  document.getElementById('ocrBtn').disabled = false;
-  document.getElementById('fileInput').value = '';
-}
-
-function delPhoto(e, idx) {
-  e.stopPropagation();
-  photos.splice(idx, 1);
-  renderThumbs();
-  if (!photos.length) document.getElementById('ocrBtn').disabled = true;
-}
-
-function renderThumbs() {
-  const container = document.getElementById('thumbs');
-  const count = document.getElementById('dzCount');
-  count.textContent = photos.length ? `${photos.length} תמונות נבחרו` : '';
-  container.innerHTML = photos.map((f, i) => `
-    <div class="thumb">
-      <img src="${URL.createObjectURL(f)}">
-      <button class="del" onclick="delPhoto(event,${i})">✕</button>
-      <span class="num">עמ' ${i+1}</span>
-    </div>`).join('');
-}
-
-// ================================================================
-// OCR
-// ================================================================
-async function resizeForOCR(file, maxPx = 1400) {
-  return new Promise(res => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = img.width * scale; c.height = img.height * scale;
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      c.toBlob(b => res(b), 'image/jpeg', 0.85);
-    };
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-async function doOCR() {
-  const btn = document.getElementById('ocrBtn');
-  btn.disabled = true;
-  log('⏳ מריץ זיהוי טקסט...', 'inf');
-  prog(5);
-
-  try {
-    const worker = await Tesseract.createWorker('heb', 1, {
-      workerPath: 'tesseract/worker.min.js',
-      corePath:   'tesseract/tesseract-core.wasm.js',
-      langPath:   'tesseract/tessdata',
-      logger: m => {
-        if (m.status === 'recognizing text') prog(20 + m.progress * 60 | 0);
-      }
-    });
-    await worker.setParameters({ tessedit_pageseg_mode: '6' });
-
-    let txt = '';
-    for (let i = 0; i < photos.length; i++) {
-      log(`📄 מזהה עמוד ${i+1} מתוך ${photos.length}...`, 'inf');
-      prog(10 + (i / photos.length) * 10 | 0);
-      const resized = await resizeForOCR(photos[i]);
-      const r = await worker.recognize(resized);
-      txt += r.data.text + '\n';
-    }
-
-    await worker.terminate();
-    prog(100);
-    fillForm(parse(txt));
-    log('✅ זיהוי הושלם — בדוק ותקן אם נדרש', 'ok');
-  } catch(err) {
-    log('⚠️ OCR נכשל — מלא ידנית', 'err');
-    fillForm({});
-  }
-
-  document.getElementById('formCard').style.display = 'block';
-  btn.disabled = false;
-}
-
-// ================================================================
-// PARSE
-// ================================================================
-function parse(txt) {
-  const d = {};
-  // תאריך
-  for (const rx of [/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})\b/, /\b(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})\b/]) {
-    const m = txt.match(rx);
-    if (m) {
-      try {
-        let dd,mo,yy;
-        if (m[1].length===4) { yy=+m[1]; mo=+m[2]; dd=+m[3]; } else { dd=+m[1]; mo=+m[2]; yy=+m[3]; }
-        if (mo>=1&&mo<=12&&dd>=1&&dd<=31&&yy>=2000&&yy<=2100) { d.date=`${yy}-${pad(mo)}-${pad(dd)}`; break; }
-      } catch(e){}
-    }
-  }
-  // לוחית
-  for (const rx of [/\b(\d{2,3}[-\s]\d{2,3}[-\s]\d{2,3})\b/, /\b(\d{7,8})\b/]) {
-    const m = txt.match(rx); if (m) { d.plate=m[1].trim(); break; }
-  }
-  // סוג תאונה
-  if (/צבא[\s\W]*צבא/.test(txt))    d.type='צבא-צבא';
-  else if (/צבא[\s\W]*אזרח/.test(txt)) d.type='צבא-אזרח';
-  else if (/צבא[\s\W]*עצמ/.test(txt))  d.type='צבא-עצמי';
-  // שם
-  for (const line of txt.split('\n')) {
-    if (/שם|נהג/.test(line)) {
-      const p = line.split(/[:\-–]/);
-      if (p[1]?.trim().length>=2) { d.driver=p[1].trim(); break; }
-    }
-  }
-  return d;
-}
-
-function fillForm(d) {
-  document.getElementById('F_plate').value  = d.plate  || '';
-  document.getElementById('F_date').value   = d.date   || today();
-  document.getElementById('F_type').value   = d.type   || '';
-  document.getElementById('F_driver').value = d.driver || '';
-}
-
-// ================================================================
-// SAVE
-// ================================================================
-async function save() {
-  const plate  = san(document.getElementById('F_plate').value  || 'לא_זוהה');
-  const dateV  = document.getElementById('F_date').value || today();
-  const type   = document.getElementById('F_type').value;
-  const driver = document.getElementById('F_driver').value;
-  const notes  = document.getElementById('F_notes').value;
-
-  const dt = new Date(dateV);
-  const y=dt.getFullYear(), mo=dt.getMonth()+1, dd=String(dt.getDate()).padStart(2,'0');
-  const dateTag = `${dd}_${pad(mo)}_${y}`;
-
-  const nf = cfg.nameFmt;
-  let base = nf==='plate_date' ? `${plate}_${dateTag}` : `${dateTag}_${plate}`;
-  if (type) base += `_${san(type)}`;
-
-  let folder = '';
-  if (cfg.folderFmt==='ym') folder = `${y}/${HEB[mo]}_${pad(mo)}_${y}`;
-  else if (cfg.folderFmt==='y') folder = `${y}`;
-
-  const saved = [];
-  for (let i = 0; i < photos.length; i++) {
-    const ext = photos[i].name.split('.').pop()||'jpg';
-    const fname = `${base}_עמוד${i+1}.${ext}`;
-    await writeFile(photos[i], fname, folder);
-    saved.push({ name: fname, folder: folder||'/' });
-  }
-
-  // מטא-דאטה
-  const meta = buildMeta({ plate, date: dateV, type, driver, notes });
-  await writeText(`${base}_פרטים.txt`, meta, folder);
-
-  const entry = { id:Date.now(), plate: document.getElementById('F_plate').value||'לא זוהה',
-    date: dateV, type, driver, folder: folder||'/', files: saved };
-  reports.unshift(entry);
-  if (reports.length>500) reports = reports.slice(0,500);
-  localStorage.setItem('acc_reports', JSON.stringify(reports));
-  updateBadge();
-
-  log(`✅ נשמר בתיקייה: ${folder||'/'}`, 'ok');
-  document.getElementById('formCard').style.display = 'none';
-  photos = [];
-  renderThumbs();
-  document.getElementById('ocrBtn').disabled = true;
-  document.getElementById('F_notes').value = '';
-}
-
-async function writeFile(file, name, folder) {
-  const buf = await file.arrayBuffer();
-  const blob = new Blob([buf], { type: file.type });
-
-  // Capacitor — שמירה לתיקיית Documents האמיתית
-  if (window.Capacitor?.isNativePlatform?.()) {
+  // --- Init worker eagerly on page load ---
+  (async function initWorker() {
     try {
-      const { Filesystem, Directory } = window.Capacitor.Plugins;
-      const path = folder ? `דוחות_תאונה/${folder}/${name}` : `דוחות_תאונה/${name}`;
-      const reader = new FileReader();
-      const b64 = await new Promise(res => {
-        reader.onload = e => res(e.target.result.split(',')[1]);
-        reader.readAsDataURL(blob);
+      ocrWorker = await Tesseract.createWorker(['heb', 'eng'], 1, {
+        workerPath: 'tesseract/worker.min.js',
+        langPath: 'tesseract/tessdata',
+        corePath: 'tesseract/tesseract-core.wasm.js',
+        cacheMethod: 'none'
       });
-      await Filesystem.writeFile({ path, data: b64, directory: Directory.Documents, recursive: true });
-      return;
-    } catch(e) { console.warn('Capacitor write failed:', e); }
+      workerReady = true;
+      const ws = document.getElementById('workerStatus');
+      ws.textContent = '✅ מנוע זיהוי מוכן';
+      ws.className = 'worker-status ready';
+      setTimeout(() => ws.style.display = 'none', 2000);
+      if (selectedFiles.length > 0) {
+        document.getElementById('processBtn').disabled = false;
+      }
+    } catch(e) {
+      document.getElementById('workerStatus').textContent = '⚠️ שגיאה בטעינת מנוע OCR';
+    }
+  })();
+
+  // --- Resize image before OCR (much faster for large photos) ---
+  function resizeForOCR(file) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, MAX_OCR_PX / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(resolve, 'image/jpeg', 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
   }
 
-  // Browser fallback — הורדה
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: name });
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
+  // --- File selection ---
+  document.getElementById('fileInput').addEventListener('change', function() {
+    const newFiles = Array.from(this.files).filter(f =>
+      ALLOWED.includes(f.type) && f.size <= MAX_SIZE
+    );
+    // Accumulate — don't replace existing selection
+    selectedFiles = selectedFiles.concat(newFiles);
+    this.value = '';
+    updateUploadUI();
+  });
 
-async function writeText(name, content, folder) {
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  if (window.Capacitor?.isNativePlatform?.()) {
+  function updateUploadUI() {
+    const area = document.getElementById('uploadArea');
+    const label = document.getElementById('uploadLabel');
+    const badge = document.getElementById('countBadge');
+    const thumbs = document.getElementById('thumbsRow');
+
+    if (selectedFiles.length === 0) {
+      area.className = 'upload-area';
+      label.textContent = 'בחר תמונות לעיבוד';
+      badge.innerHTML = '';
+      thumbs.innerHTML = '';
+      document.getElementById('processBtn').disabled = true;
+      document.getElementById('processBtn').textContent = 'עבד תמונות';
+      return;
+    }
+
+    area.className = 'upload-area has-files';
+    label.textContent = 'הוסף עוד תמונות';
+    badge.innerHTML = `<div class="count-badge">✅ ${selectedFiles.length} תמונות נבחרו</div>`;
+
+    // Show up to 5 thumbnails
+    const MAX_THUMBS = 5;
+    const show = selectedFiles.slice(0, MAX_THUMBS);
+    const extra = selectedFiles.length - MAX_THUMBS;
+    thumbs.innerHTML = show.map(f => {
+      const url = URL.createObjectURL(f);
+      return `<div class="thumb-item"><img src="${url}" onload="URL.revokeObjectURL(this.src)"></div>`;
+    }).join('') + (extra > 0 ? `<div class="thumb-more">+${extra}</div>` : '');
+
+    document.getElementById('processBtn').disabled = !workerReady;
+    document.getElementById('processBtn').textContent = `🔍 עבד ${selectedFiles.length} תמונות`;
+  }
+
+  // --- Field parsing ---
+  function parseFields(text) {
+    const data = { date: null, license_plate: null, driver_name: null };
+
+    const dateMatch = text.match(/(\d{1,2}[\/\.]\d{1,2}[\/\.]\d{4})/);
+    if (dateMatch) data.date = dateMatch[1].replace(/\./g, '/');
+
+    // Israeli plate: 7-8 digits, optionally with dashes
+    const plateMatch = text.match(/\b(\d{2,3}[-\s]\d{2,3}[-\s]\d{2,3})\b/) ||
+                       text.match(/\b(\d{7,8})\b/);
+    if (plateMatch) data.license_plate = plateMatch[1].replace(/[-\s]/g, '-');
+
+    const nameMatch = text.match(/שם[:\s]+([\u0590-\u05FF\s]{2,})/);
+    if (nameMatch) data.driver_name = nameMatch[1].trim().split('\n')[0].trim();
+
+    return data;
+  }
+
+  // --- Build filename ---
+  function buildFilename(data, pageNum, multiPage, ext) {
+    const plate = (data.license_plate || 'unknown_plate').replace(/[^a-zA-Z0-9\u0590-\u05FF\-]/g, '_');
+    let dateStr = 'no_date';
+    if (data.date) {
+      const parts = data.date.split('/');
+      if (parts.length === 3) dateStr = `${parts[0]}_${parts[1]}_${parts[2]}`;
+    }
+    const pageSuffix = multiPage ? `_עמוד${pageNum}` : '';
+    return `${plate}_${dateStr}${pageSuffix}${ext}`;
+  }
+
+  // --- Download file ---
+  function downloadFile(file, filename) {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // --- Download all pages in a group (staggered) ---
+  function downloadAll(items) {
+    items.forEach((item, idx) => {
+      setTimeout(() => {
+        const ext = '.' + item.file.name.split('.').pop().toLowerCase();
+        const filename = buildFilename(item.data, idx + 1, items.length > 1, ext);
+        downloadFile(item.file, filename);
+      }, idx * 400);
+    });
+  }
+
+  // --- Update per-file progress bar ---
+  function setProgress(i, pct, statusText) {
+    const bar = document.getElementById('bar_' + i);
+    const status = document.getElementById('status_' + i);
+    if (bar) bar.style.width = pct + '%';
+    if (status) status.textContent = statusText;
+  }
+
+  // --- Main processing ---
+  async function startProcessing() {
+    if (!selectedFiles.length || !workerReady) return;
+
+    document.getElementById('processBtn').disabled = true;
+    document.getElementById('processBtn').textContent = 'מעבד...';
+
+    const progressSection = document.getElementById('progressSection');
+    const progressList = document.getElementById('progressList');
+    progressSection.classList.add('visible');
+    progressList.innerHTML = '';
+
+    // Build progress rows
+    selectedFiles.forEach((file, i) => {
+      const row = document.createElement('div');
+      row.className = 'file-progress';
+      row.innerHTML = `
+        <div class="file-name">${file.name}</div>
+        <div class="progress-bar-bg"><div class="progress-bar" id="bar_${i}"></div></div>
+        <div class="progress-status" id="status_${i}">ממתין...</div>
+      `;
+      progressList.appendChild(row);
+    });
+
+    const results = [];
+    const errors = [];
+
     try {
-      const { Filesystem, Directory } = window.Capacitor.Plugins;
-      const path = folder ? `דוחות_תאונה/${folder}/${name}` : `דוחות_תאונה/${name}`;
-      await Filesystem.writeFile({ path, data: btoa(unescape(encodeURIComponent(content))), directory: Directory.Documents, recursive: true });
-      return;
-    } catch(e) {}
+      // Step 1: Resize ALL images in parallel (canvas = non-blocking, very fast)
+      selectedFiles.forEach((_, i) => setProgress(i, 5, 'ממזער תמונה...'));
+      const resized = await Promise.all(selectedFiles.map(f => resizeForOCR(f)));
+      selectedFiles.forEach((_, i) => setProgress(i, 15, 'ממתין לזיהוי...'));
+
+      // Step 2: OCR sequentially (single worker, but images are already small)
+      for (let i = 0; i < resized.length; i++) {
+        setProgress(i, 20, 'מזהה טקסט...');
+        try {
+          const { data: { text } } = await ocrWorker.recognize(resized[i], {}, {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                const pct = 20 + Math.round(m.progress * 75);
+                setProgress(i, pct, `זיהוי OCR: ${pct}%`);
+              }
+            }
+          });
+          setProgress(i, 100, '✅ הושלם');
+          results.push({ file: selectedFiles[i], data: parseFields(text), index: i });
+        } catch(e) {
+          setProgress(i, 100, '❌ נכשל');
+          errors.push({ file: selectedFiles[i], error: e.message || 'שגיאת OCR' });
+        }
+      }
+
+    } catch(e) {
+      alert('שגיאה קריטית: ' + e.message);
+    }
+
+    showResults(results, errors);
+
+    document.getElementById('processBtn').disabled = false;
+    document.getElementById('processBtn').textContent = `🔍 עבד ${selectedFiles.length} תמונות`;
   }
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: name });
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 
-function buildMeta(d) {
-  return [
-    '=== פרטי דוח תאונה ===',
-    d.plate   ? `לוחית רישוי: ${d.plate}`   : '',
-    d.date    ? `תאריך: ${fmtDate(d.date)}`  : '',
-    d.type    ? `סוג תאונה: ${d.type}`       : '',
-    d.driver  ? `נהג: ${d.driver}`           : '',
-    d.notes   ? `הערות: ${d.notes}`         : '',
-    '',
-    `נוצר: ${new Date().toLocaleString('he-IL')}`,
-  ].filter(l=>l!=='' || l==='').join('\n');
-}
+  // --- Show results grouped by license plate ---
+  function showResults(results, errors) {
+    const section = document.getElementById('resultsSection');
+    const resultsList = document.getElementById('resultsList');
+    const errorsList = document.getElementById('errorsList');
+    const summaryBar = document.getElementById('summaryBar');
+    section.classList.add('visible');
+    resultsList.innerHTML = '';
+    errorsList.innerHTML = '';
 
-// ================================================================
-// LIST
-// ================================================================
-function renderList() {
-  const el = document.getElementById('reportList');
-  if (!reports.length) {
-    el.innerHTML = '<div class="empty"><span>📭</span>לא נשמרו דוחות עדיין</div>';
-    return;
+    summaryBar.textContent =
+      `✅ עובדו ${results.length} קבצים${errors.length > 0 ? ` | ❌ ${errors.length} נכשלו` : ''}`;
+
+    // Group by license plate — same plate = same report
+    const groups = {};
+    for (const r of results) {
+      const plate = r.data.license_plate || 'unknown_plate';
+      if (!groups[plate]) groups[plate] = [];
+      groups[plate].push(r);
+    }
+
+    for (const [plate, items] of Object.entries(groups)) {
+      const multiPage = items.length > 1;
+      const card = document.createElement('div');
+      card.className = 'group-card';
+
+      // Pick best data across all pages (first non-null wins)
+      const merged = items.reduce((acc, item) => ({
+        date: acc.date || item.data.date,
+        license_plate: acc.license_plate || item.data.license_plate,
+        driver_name: acc.driver_name || item.data.driver_name
+      }), { date: null, license_plate: null, driver_name: null });
+
+      const dateDisplay = merged.date || 'תאריך לא זוהה';
+      const driver = merged.driver_name || 'לא זוהה';
+
+      // Per-page buttons
+      let pagesHtml = '';
+      items.forEach((item, idx) => {
+        const pageNum = idx + 1;
+        const ext = '.' + item.file.name.split('.').pop().toLowerCase();
+        const filename = buildFilename(merged, pageNum, multiPage, ext);
+        pagesHtml += `
+          <button class="page-btn" onclick="downloadFile(selectedFiles[${item.index}], '${filename}')">
+            ⬇️ עמוד ${pageNum}<br><small style="font-size:10px;opacity:0.8">${filename}</small>
+          </button>`;
+      });
+
+      // "Download all" button shown only when there are multiple pages
+      const downloadAllBtn = multiPage
+        ? `<button class="page-btn-all" onclick="downloadAll(groupsData['${plate}'])">
+            ⬇️ הורד הכל (${items.length} עמודים)<br>
+            <small style="font-size:10px;opacity:0.85">לתיקייה אחת</small>
+           </button>`
+        : '';
+
+      card.innerHTML = `
+        <div class="group-plate">🚗 ${plate}</div>
+        <div class="group-meta">
+          <span>📅 ${dateDisplay}</span>
+          <span>👤 ${driver}</span>
+          ${multiPage ? `<span>📄 ${items.length} עמודים</span>` : ''}
+        </div>
+        <div class="pages-row">
+          ${downloadAllBtn}
+          ${pagesHtml}
+        </div>
+      `;
+      resultsList.appendChild(card);
+    }
+
+    // Expose groups to downloadAll onclick handlers
+    window.groupsData = {};
+    for (const [plate, items] of Object.entries(groups)) {
+      const merged = items.reduce((acc, item) => ({
+        date: acc.date || item.data.date,
+        license_plate: acc.license_plate || item.data.license_plate,
+        driver_name: acc.driver_name || item.data.driver_name
+      }), { date: null, license_plate: null, driver_name: null });
+      window.groupsData[plate] = items.map((item, idx) => ({
+        ...item,
+        data: merged
+      }));
+    }
+
+    errors.forEach(e => {
+      const div = document.createElement('div');
+      div.className = 'error-tag';
+      div.textContent = `❌ ${e.file.name}: ${e.error}`;
+      errorsList.appendChild(div);
+    });
+
+    section.scrollIntoView({ behavior: 'smooth' });
   }
-  el.innerHTML = reports.map(r => `
-    <div class="report-item">
-      <span class="ico">📄</span>
-      <div class="info">
-        <div class="title">${r.plate} ${r.type ? '· ' + r.type : ''}</div>
-        <div class="sub">📅 ${fmtDate(r.date)} ${r.driver ? '· ' + r.driver : ''}</div>
-      </div>
-      <span class="folder-tag">📁 ${r.folder}</span>
-    </div>`).join('');
-}
-
-// ================================================================
-// CONFIG
-// ================================================================
-function loadCfg() {
-  document.getElementById('nameFmt').value  = cfg.nameFmt   || 'plate_date';
-  document.getElementById('folderFmt').value = cfg.folderFmt || 'ym';
-}
-function saveCfg() {
-  cfg.nameFmt   = document.getElementById('nameFmt').value;
-  cfg.folderFmt = document.getElementById('folderFmt').value;
-  localStorage.setItem('acc_cfg', JSON.stringify(cfg));
-}
-function clearAll() {
-  if (!confirm('למחוק את כל ההיסטוריה?')) return;
-  reports = []; localStorage.removeItem('acc_reports');
-  updateBadge(); renderList();
-}
-
-// ================================================================
-// UTILS
-// ================================================================
-function san(s){ return (s||'').replace(/[^\w\u0590-\u05FF\-]/g,'_').slice(0,30).replace(/^_+|_+$/g,'')||'unknown'; }
-function pad(n){ return String(n).padStart(2,'0'); }
-function today(){ return new Date().toISOString().slice(0,10); }
-function fmtDate(iso){ if (!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
-function updateBadge(){ document.getElementById('badge').textContent = reports.length + ' דוחות'; }
-function log(msg,cls=''){ const e=document.getElementById('logEl'); e.textContent=msg; e.className='log '+cls; }
-function prog(pct){
-  const w=document.getElementById('prog'), b=document.getElementById('progBar');
-  w.classList.add('show'); b.style.width=pct+'%';
-  if(pct>=100) setTimeout(()=>w.classList.remove('show'),800);
-}
-
-updateBadge();
 </script>
+
 </body>
 </html>
