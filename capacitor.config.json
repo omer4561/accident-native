@@ -3,7 +3,7 @@
   "appName": "דוחות תאונה",
   "webDir": "www",
   "android": {
-    "allowMixedContent": true
+    "allowMixedContent": false
   },
   "plugins": {
     "Camera": {

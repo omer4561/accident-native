@@ -48,26 +48,101 @@ jobs:
       - name: Sync web assets to Android
         run: npx cap sync android
 
-      - name: Build Debug APK
+      - name: Generate release keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore $HOME/release.keystore \
+            -alias accident \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass AccidentApp2025! \
+            -keypass AccidentApp2025! \
+            -dname "CN=Accident Reporter,OU=App,O=AccidentReporter,L=Tel Aviv,S=Israel,C=IL"
+
+      - name: Patch build.gradle — SDK 35 + release signing
+        run: |
+          python3 << 'EOF'
+          import re
+
+          with open('android/app/build.gradle', 'r') as f:
+              content = f.read()
+
+          # Upgrade SDK versions
+          content = re.sub(r'compileSdkVersion \d+', 'compileSdkVersion 35', content)
+          content = re.sub(r'targetSdkVersion \d+',  'targetSdkVersion 35',  content)
+
+          # Inject signingConfigs block before android {
+          signing_block = '''
+          signingConfigs {
+              release {
+                  storeFile     file(System.getenv("HOME") + "/release.keystore")
+                  storePassword "AccidentApp2025!"
+                  keyAlias      "accident"
+                  keyPassword   "AccidentApp2025!"
+              }
+          }
+          '''
+          content = re.sub(
+              r'(android\s*\{)',
+              signing_block + r'\1',
+              content, count=1
+          )
+
+          # Wire release buildType to signingConfig
+          content = re.sub(
+              r'(buildTypes\s*\{[^}]*release\s*\{)',
+              r'\1\n                signingConfig signingConfigs.release',
+              content, count=1, flags=re.DOTALL
+          )
+
+          with open('android/app/build.gradle', 'w') as f:
+              f.write(content)
+
+          print("build.gradle patched")
+          EOF
+
+      - name: Add network security config
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          cat > android/app/src/main/res/xml/network_security_config.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <network-security-config>
+              <base-config cleartextTrafficPermitted="false">
+                  <trust-anchors>
+                      <certificates src="system" />
+                  </trust-anchors>
+              </base-config>
+          </network-security-config>
+          EOF
+          # Reference it in AndroidManifest.xml
+          sed -i 's/<application/<application android:networkSecurityConfig="@xml\/network_security_config"/' \
+            android/app/src/main/AndroidManifest.xml
+
+      - name: Build Release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Verify APK is signed
+        run: |
+          APK=$(find android -name "app-release.apk" -type f)
+          echo "APK path: $APK"
+          apksigner verify --verbose "$APK"
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v6
         with:
-          name: accident-reporter-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: accident-reporter-release
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
       - name: Create Release
         run: |
           gh release create "v${{ github.run_number }}" \
-            android/app/build/outputs/apk/debug/app-debug.apk \
+            android/app/build/outputs/apk/release/app-release.apk \
             --title "דוחות תאונה v${{ github.run_number }}" \
             --notes "## התקנה
-          1. הורד את קובץ \`accident-reporter.apk\`
+          1. הורד את קובץ \`app-release.apk\`
           2. פתח אותו בטלפון Android
           3. אשר התקנה ממקורות לא ידועים"
         env:
