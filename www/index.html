@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
-  <script src="tesseract/tesseract.min.js"></script>
-  <script>const APP_BUILD = 12;</script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -239,64 +238,6 @@
       margin-bottom: 12px;
     }
 
-    .version-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: white;
-      border-radius: 10px;
-      padding: 10px 14px;
-      margin-bottom: 12px;
-      font-size: 13px;
-      color: #555;
-    }
-    .version-bar .ver-label { color: #888; }
-    .btn-check-update {
-      background: #e8f0fe;
-      color: #1a73e8;
-      border: none;
-      border-radius: 8px;
-      padding: 6px 14px;
-      font-size: 13px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .btn-check-update:active { background: #c5d9fb; }
-
-    .update-banner {
-      display: none;
-      background: #fff8e1;
-      border: 2px solid #f9a825;
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
-      text-align: center;
-    }
-    .update-banner.visible { display: block; }
-    .upd-title {
-      font-size: 16px;
-      font-weight: bold;
-      color: #e65100;
-      margin-bottom: 10px;
-    }
-    .btn-update {
-      display: inline-block;
-      background: #f9a825;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      padding: 12px 28px;
-      font-size: 15px;
-      font-weight: bold;
-      cursor: pointer;
-      text-decoration: none;
-    }
-    .btn-update:active { background: #e65100; }
-    .upd-hint {
-      font-size: 12px;
-      color: #888;
-      margin-top: 8px;
-    }
 
     .worker-status {
       font-size: 12px;
@@ -312,19 +253,6 @@
 <header>🚗 ארגון דוחות תאונה</header>
 
 <div class="container">
-
-  <!-- Version bar -->
-  <div class="version-bar">
-    <span class="ver-label">גרסה <strong id="verNum">...</strong></span>
-    <button class="btn-check-update" id="checkBtn" onclick="manualCheckUpdate()">🔄 בדוק עדכונים</button>
-  </div>
-
-  <!-- Update banner (hidden until update found) -->
-  <div class="update-banner" id="updateBanner">
-    <div class="upd-title">🆕 עדכון זמין!</div>
-    <a id="updateBtn" class="btn-update" href="#" target="_blank">⬇️ הורד עדכון עכשיו</a>
-    <div class="upd-hint">התקן את ה-APK מעל הישן — אין צורך למחוק</div>
-  </div>
 
   <div class="worker-status" id="workerStatus">⏳ מכין מנוע זיהוי...</div>
 
@@ -360,62 +288,7 @@
 </div>
 
 <script>
-  // --- Update checker ---
-  document.getElementById('verNum').textContent = APP_BUILD;
-
-  async function checkForUpdate() {
-    const checkBtn = document.getElementById('checkBtn');
-    checkBtn.disabled = true;
-    checkBtn.textContent = '⏳ בודק...';
-    try {
-      const res = await fetch(
-        'https://api.github.com/repos/omer4561/accident-native/releases/latest',
-        { cache: 'no-store' }
-      );
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const release = await res.json();
-      const latestBuild = parseInt(release.tag_name.replace('v', ''), 10);
-
-      if (latestBuild > APP_BUILD) {
-        const apkAsset = release.assets.find(a => a.name.endsWith('.apk'));
-        if (apkAsset) {
-          document.getElementById('updateBtn').href = apkAsset.browser_download_url;
-        }
-        document.getElementById('updateBanner').classList.add('visible');
-        checkBtn.textContent = `🆕 v${latestBuild} זמין`;
-        checkBtn.style.background = '#fce8e6';
-        checkBtn.style.color = '#c5221f';
-      } else {
-        checkBtn.textContent = '✅ עדכני';
-        checkBtn.style.background = '#e6f4ea';
-        checkBtn.style.color = '#1e8e3e';
-        setTimeout(() => {
-          checkBtn.textContent = '🔄 בדוק עדכונים';
-          checkBtn.style.background = '';
-          checkBtn.style.color = '';
-          checkBtn.disabled = false;
-        }, 3000);
-        return;
-      }
-    } catch(e) {
-      checkBtn.textContent = '⚠️ לא זמין';
-      checkBtn.style.background = '#fce8e6';
-      setTimeout(() => {
-        checkBtn.textContent = '🔄 בדוק עדכונים';
-        checkBtn.style.background = '';
-        checkBtn.disabled = false;
-      }, 3000);
-      return;
-    }
-    checkBtn.disabled = false;
-  }
-
-  function manualCheckUpdate() { checkForUpdate(); }
-
-  // Auto-check on load
-  checkForUpdate();
-
-  const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
+const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
   const MAX_SIZE = 10 * 1024 * 1024;
   const MAX_OCR_PX = 1400;
 
@@ -428,11 +301,7 @@
   (async function initWorker() {
     const ws = document.getElementById('workerStatus');
     try {
-      ocrWorker = await Tesseract.createWorker(['heb', 'eng'], 1, {
-        workerPath: 'tesseract/worker.min.js',
-        langPath: 'tesseract/tessdata',
-        corePath: 'tesseract/tesseract-core.wasm.js',
-        cacheMethod: 'none',
+      ocrWorker = await Tesseract.createWorker('heb', 1, {
         logger: m => {
           if (m.status === 'recognizing text' && ocrProgressCallback) {
             ocrProgressCallback(m.progress);

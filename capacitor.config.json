@@ -2,6 +2,10 @@
   "appId": "com.accidentreporter.app",
   "appName": "דוחות תאונה",
   "webDir": "www",
+  "server": {
+    "url": "https://omer4561.github.io/accident-native",
+    "cleartext": false
+  },
   "android": {
     "allowMixedContent": false
   },
