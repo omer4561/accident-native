@@ -569,7 +569,7 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
           const { data: { text } } = await ocrWorker.recognize(resized[i]);
           ocrProgressCallback = null;
           setProgress(i, 100, '✅ הושלם');
-          results.push({ file: selectedFiles[i], data: parseFields(text), index: i });
+          results.push({ file: selectedFiles[i], data: parseFields(text), index: i, rawText: text });
         } catch(e) {
           ocrProgressCallback = null;
           setProgress(i, 100, '❌ נכשל');
@@ -650,6 +650,11 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
           </button>`;
       });
 
+      // Collect raw text from all pages for debug display
+      const rawAll = items.map((it, idx) =>
+        `--- עמוד ${idx+1} ---\n${it.rawText || ''}`)
+        .join('\n\n');
+
       card.innerHTML = `
         <div class="group-plate">🚗 ${plate}</div>
         <div class="group-meta">
@@ -661,6 +666,10 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
           ${saveAllBtn}
           ${pagesHtml}
         </div>
+        <details style="margin-top:10px">
+          <summary style="font-size:12px;color:#888;cursor:pointer">🔍 טקסט גולמי מ-OCR</summary>
+          <pre style="font-size:11px;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;white-space:pre-wrap;direction:ltr;text-align:left;max-height:200px;overflow-y:auto">${rawAll.replace(/</g,'&lt;')}</pre>
+        </details>
       `;
       resultsList.appendChild(card);
     }
