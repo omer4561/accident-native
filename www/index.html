@@ -390,16 +390,41 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
   function parseFields(text) {
     const data = { date: null, license_plate: null, driver_name: null };
 
-    const dateMatch = text.match(/(\d{1,2}[\/\.]\d{1,2}[\/\.]\d{4})/);
-    if (dateMatch) data.date = dateMatch[1].replace(/\./g, '/');
+    // --- Date: very flexible — handles spaces, multiple separators, OCR misreads ---
+    // sep = any combo of spaces + one of: / . - | \ l I (OCR often misreads slash)
+    const sep = '[\\s]*[/\\.\\-|\\\\lI][\\s]*';
+    const datePatterns = [
+      // DD/MM/YYYY (Israeli standard)
+      new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{4})`),
+      // YYYY/MM/DD (ISO-ish)
+      new RegExp(`(\\d{4})${sep}(\\d{1,2})${sep}(\\d{1,2})`),
+    ];
+    for (const rx of datePatterns) {
+      const m = text.match(rx);
+      if (m) {
+        let dd, mm, yyyy;
+        if (m[1].length === 4) { yyyy = +m[1]; mm = +m[2]; dd = +m[3]; }
+        else                   { dd = +m[1]; mm = +m[2]; yyyy = +m[3]; }
+        if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yyyy >= 2000 && yyyy <= 2100) {
+          data.date = `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
+          break;
+        }
+      }
+    }
 
-    // Israeli plate: 7-8 digits, optionally with dashes
-    const plateMatch = text.match(/\b(\d{2,3}[-\s]\d{2,3}[-\s]\d{2,3})\b/) ||
-                       text.match(/\b(\d{7,8})\b/);
-    if (plateMatch) data.license_plate = plateMatch[1].replace(/[-\s]/g, '-');
+    // --- License plate: 7-8 digits with optional separators, or compact ---
+    const plateMatch =
+      text.match(/\b(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})\b/) ||
+      text.match(/\b(\d{7,8})\b/);
+    if (plateMatch) {
+      data.license_plate = plateMatch[1].length <= 3 && plateMatch[2]
+        ? `${plateMatch[1]}-${plateMatch[2]}-${plateMatch[3]}`
+        : plateMatch[1];
+    }
 
-    const nameMatch = text.match(/שם[:\s]+([\u0590-\u05FF\s]{2,})/);
-    if (nameMatch) data.driver_name = nameMatch[1].trim().split('\n')[0].trim();
+    // --- Driver name: after שם / נהג ---
+    const nameMatch = text.match(/(?:שם|נהג)[^:\n]*[:\s]+([\u0590-\u05FF][^\n]{1,30})/);
+    if (nameMatch) data.driver_name = nameMatch[1].trim();
 
     return data;
   }
