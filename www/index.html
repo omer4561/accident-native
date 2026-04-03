@@ -605,12 +605,17 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
     summaryBar.textContent =
       `✅ עובדו ${results.length} קבצים${errors.length > 0 ? ` | ❌ ${errors.length} נכשלו` : ''}`;
 
-    // Group by license plate — same plate = same report
+    // Group by plate + date — same plate AND same date = same report
+    let unknownCount = 0;
     const groups = {};
     for (const r of results) {
-      const plate = r.data.license_plate || 'unknown_plate';
-      if (!groups[plate]) groups[plate] = [];
-      groups[plate].push(r);
+      const plate = r.data.license_plate || 'unknown';
+      const date  = r.data.date          || null;
+      const key   = date
+        ? `${plate}__${date}`
+        : `${plate}__no_date_${unknownCount++}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
     }
 
     // Build groupsData FIRST so onclick handlers can access it
