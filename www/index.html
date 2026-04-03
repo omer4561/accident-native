@@ -422,26 +422,35 @@
   let selectedFiles = [];
   let ocrWorker = null;
   let workerReady = false;
+  let ocrProgressCallback = null;
 
   // --- Init worker eagerly on page load ---
   (async function initWorker() {
+    const ws = document.getElementById('workerStatus');
     try {
       ocrWorker = await Tesseract.createWorker(['heb', 'eng'], 1, {
         workerPath: 'tesseract/worker.min.js',
         langPath: 'tesseract/tessdata',
         corePath: 'tesseract/tesseract-core.wasm.js',
-        cacheMethod: 'none'
+        cacheMethod: 'none',
+        logger: m => {
+          if (m.status === 'recognizing text' && ocrProgressCallback) {
+            ocrProgressCallback(m.progress);
+          }
+        }
       });
       workerReady = true;
-      const ws = document.getElementById('workerStatus');
       ws.textContent = '✅ מנוע זיהוי מוכן';
       ws.className = 'worker-status ready';
       setTimeout(() => ws.style.display = 'none', 2000);
-      if (selectedFiles.length > 0) {
-        document.getElementById('processBtn').disabled = false;
-      }
     } catch(e) {
-      document.getElementById('workerStatus').textContent = '⚠️ שגיאה בטעינת מנוע OCR';
+      ws.textContent = '⚠️ שגיאה בטעינת מנוע OCR — OCR לא יעבוד';
+      ws.style.color = '#c5221f';
+      // Still allow button — user can try manually
+    }
+    // Enable button if files already selected (regardless of worker state)
+    if (selectedFiles.length > 0) {
+      document.getElementById('processBtn').disabled = false;
     }
   })();
 
@@ -504,7 +513,7 @@
       return `<div class="thumb-item"><img src="${url}" onload="URL.revokeObjectURL(this.src)"></div>`;
     }).join('') + (extra > 0 ? `<div class="thumb-more">+${extra}</div>` : '');
 
-    document.getElementById('processBtn').disabled = !workerReady;
+    document.getElementById('processBtn').disabled = false;
     document.getElementById('processBtn').textContent = `🔍 עבד ${selectedFiles.length} תמונות`;
   }
 
@@ -650,20 +659,21 @@
       selectedFiles.forEach((_, i) => setProgress(i, 15, 'ממתין לזיהוי...'));
 
       // Step 2: OCR sequentially (single worker, but images are already small)
+      if (!ocrWorker) throw new Error('מנוע OCR לא נטען — נסה להפעיל מחדש');
       for (let i = 0; i < resized.length; i++) {
         setProgress(i, 20, 'מזהה טקסט...');
         try {
-          const { data: { text } } = await ocrWorker.recognize(resized[i], {}, {
-            logger: m => {
-              if (m.status === 'recognizing text') {
-                const pct = 20 + Math.round(m.progress * 75);
-                setProgress(i, pct, `זיהוי OCR: ${pct}%`);
-              }
-            }
-          });
+          // Set progress callback for this image (logger lives in createWorker in v5)
+          ocrProgressCallback = progress => {
+            const pct = 20 + Math.round(progress * 75);
+            setProgress(i, pct, `זיהוי OCR: ${pct}%`);
+          };
+          const { data: { text } } = await ocrWorker.recognize(resized[i]);
+          ocrProgressCallback = null;
           setProgress(i, 100, '✅ הושלם');
           results.push({ file: selectedFiles[i], data: parseFields(text), index: i });
         } catch(e) {
+          ocrProgressCallback = null;
           setProgress(i, 100, '❌ נכשל');
           errors.push({ file: selectedFiles[i], error: e.message || 'שגיאת OCR' });
         }
