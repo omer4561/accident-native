@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -36,11 +39,9 @@ jobs:
       - name: Download Tesseract.js files (offline bundle)
         run: |
           mkdir -p www/tesseract/tessdata
-          # Tesseract.js core files
           curl -L "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" -o www/tesseract/tesseract.min.js
           curl -L "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js" -o www/tesseract/worker.min.js
           curl -L "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js" -o www/tesseract/tesseract-core.wasm.js
-          # Language files
           curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/heb.traineddata.gz" -o www/tesseract/tessdata/heb.traineddata.gz
           curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/eng.traineddata.gz" -o www/tesseract/tessdata/eng.traineddata.gz
           echo "Tesseract files downloaded:"
