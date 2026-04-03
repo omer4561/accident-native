@@ -106,13 +106,13 @@
     <h2>📷 צלם את הדוח</h2>
     <div class="slots">
       <div class="slot" id="s1" onclick="pickPhoto(1)">
-        <input type="file" id="f1" accept="image/*" capture="environment" onchange="gotPhoto(1,this)">
+        <input type="file" id="f1" accept="image/*" onchange="gotPhoto(1,this)">
         <button class="del" onclick="delPhoto(event,1)">✕</button>
         <span class="icon">📷</span>
         <span class="lbl">עמוד 1</span>
       </div>
       <div class="slot" id="s2" onclick="pickPhoto(2)">
-        <input type="file" id="f2" accept="image/*" capture="environment" onchange="gotPhoto(2,this)">
+        <input type="file" id="f2" accept="image/*" onchange="gotPhoto(2,this)">
         <button class="del" onclick="delPhoto(event,2)">✕</button>
         <span class="icon">📷</span>
         <span class="lbl">עמוד 2 (אופציונלי)</span>

@@ -100,7 +100,7 @@ jobs:
           print("build.gradle patched")
           EOF
 
-      - name: Add network security config
+      - name: Add network security config + media permissions
         run: |
           mkdir -p android/app/src/main/res/xml
           cat > android/app/src/main/res/xml/network_security_config.xml << 'EOF'
@@ -113,7 +113,11 @@ jobs:
               </base-config>
           </network-security-config>
           EOF
-          # Reference it in AndroidManifest.xml
+
+          # Add media permissions + network security config to AndroidManifest.xml
+          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n</manifest>|' \
+            android/app/src/main/AndroidManifest.xml
+
           sed -i 's/<application/<application android:networkSecurityConfig="@xml\/network_security_config"/' \
             android/app/src/main/AndroidManifest.xml
 
