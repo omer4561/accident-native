@@ -70,9 +70,8 @@ jobs:
           content = re.sub(r'compileSdkVersion \d+', 'compileSdkVersion 35', content)
           content = re.sub(r'targetSdkVersion \d+',  'targetSdkVersion 35',  content)
 
-          # Inject signingConfigs block before android {
-          signing_block = '''
-          signingConfigs {
+          # Inject signingConfigs block INSIDE android { ... }
+          signing_block = '''    signingConfigs {
               release {
                   storeFile     file(System.getenv("HOME") + "/release.keystore")
                   storePassword "AccidentApp2025!"
@@ -83,7 +82,7 @@ jobs:
           '''
           content = re.sub(
               r'(android\s*\{)',
-              signing_block + r'\1',
+              r'\1\n' + signing_block,
               content, count=1
           )
 
@@ -98,6 +97,7 @@ jobs:
               f.write(content)
 
           print("build.gradle patched")
+          print(open('android/app/build.gradle').read())
           EOF
 
       - name: Add network security config + media permissions
