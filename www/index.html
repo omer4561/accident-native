@@ -216,6 +216,14 @@
       <button onclick="closeSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#555">✕</button>
     </div>
     <div class="settings-row">
+      <label>🤖 מפתח Gemini API <span style="font-size:11px;color:#888">(אופציונלי — משפר זיהוי כתב יד)</span></label>
+      <input type="password" id="geminiKeyInput" placeholder="AIza..." autocomplete="off"
+        style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;direction:ltr">
+      <div style="font-size:11px;color:#888;margin-top:4px">
+        מפתח חינמי: <span style="color:#1a73e8">aistudio.google.com</span> → Get API Key
+      </div>
+    </div>
+    <div class="settings-row">
       <label>זמן המתנה בין העלאה להעלאה</label>
       <input type="range" id="delaySlider" min="3" max="60" step="1" oninput="updateDelayLabel(this.value)">
       <div class="settings-val"><span id="delayLabel">10</span> שניות</div>
@@ -297,6 +305,8 @@
   function openSettings() {
     document.getElementById('delaySlider').value = resetDelay;
     document.getElementById('delayLabel').textContent = resetDelay;
+    const k = localStorage.getItem('gemini_key') || '';
+    document.getElementById('geminiKeyInput').value = k;
     document.getElementById('settingsOverlay').classList.add('open');
   }
   function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
@@ -305,7 +315,23 @@
   function saveSettings() {
     resetDelay = parseInt(document.getElementById('delaySlider').value, 10);
     localStorage.setItem('resetDelay', resetDelay);
+    const key = document.getElementById('geminiKeyInput').value.trim();
+    if (key) localStorage.setItem('gemini_key', key);
+    else localStorage.removeItem('gemini_key');
+    updateWorkerStatus();
     closeSettings();
+  }
+
+  function updateWorkerStatus() {
+    const ws = document.getElementById('workerStatus');
+    if (localStorage.getItem('gemini_key')) {
+      ws.textContent = '✅ Gemini AI פעיל';
+      ws.className = 'worker-status ready';
+      ws.style.display = '';
+      setTimeout(() => ws.style.display = 'none', 2000);
+      // אפשר כפתור עיבוד גם ללא Tesseract
+      if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
+    }
   }
 
   function startResetTimer() {
@@ -503,6 +529,18 @@
 
   (async function initWorker() {
     const ws = document.getElementById('workerStatus');
+
+    // אם Gemini מוגדר — מציג סטטוס ומאפשר כפתור מיד, Tesseract לא נחוץ
+    if (localStorage.getItem('gemini_key')) {
+      ws.textContent = '✅ Gemini AI פעיל';
+      ws.className = 'worker-status ready';
+      setTimeout(() => ws.style.display = 'none', 2000);
+      workerReady = true;
+      if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
+      return;
+    }
+
+    // טעינת Tesseract כ-fallback
     const loggerFn = m => {
       if (m.status === 'recognizing text' && ocrProgressCallback) ocrProgressCallback(m.progress);
     };
@@ -514,7 +552,6 @@
         langPath:   BASE + '/tessdata',
         logger: loggerFn
       });
-      // PSM 3 = auto page segmentation — עובד הכי טוב לטפסים מודפסים עם שדות מרובים
       await ocrWorker.setParameters({ tessedit_pageseg_mode: '3' });
       workerReady = true;
       ws.textContent = '✅ מנוע זיהוי מוכן';
@@ -842,9 +879,62 @@
     });
   }
 
+  // ===================== GEMINI VISION =====================
+  async function analyzeWithGemini(file, apiKey, progressCb) {
+    progressCb(10, 'שולח ל-Gemini AI...');
+    const base64 = await fileToBase64(file);
+    const mime = file.type || 'image/jpeg';
+    progressCb(30, 'מנתח תמונה...');
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { inline_data: { mime_type: mime, data: base64 } },
+            { text: `זהו טופס דיווח תאונת דרכים צבאי ישראלי (33.1106). חלץ את הנתונים הבאים:
+
+1. תאריך (date) — מופיע:
+   עמוד 1: במלבן שמאל-עליון, שורה ראשונה מימין
+   עמוד 2: ליד "תאריך פרטי הנהג" או ליד "ניתן אישור תיקון בתאריך" (חלק ג')
+   פורמט תוצאה: DD/MM/YYYY. אם רק יום וחודש — הוסף שנה נוכחית.
+
+2. מספר רכב (license_plate) — מופיע:
+   עמוד 1: שתי שורות מתחת לתאריך, ליד המילה "מספר"
+   עמוד 2: ליד "מספר רישום" בחלק ג'
+   יכול להיות אזרחי (123-45-678) או צבאי (8 ספרות רצופות).
+
+3. שם הנהג (driver_name) — ליד "שם" או "נהג".
+
+החזר אך ורק JSON תקני ללא markdown:
+{"date":"DD/MM/YYYY","license_plate":"מספר","driver_name":"שם"}
+השתמש ב-null לשדות שלא נמצאו.` }
+          ]}],
+          generationConfig: { temperature: 0, maxOutputTokens: 200 }
+        })
+      }
+    );
+
+    progressCb(80, 'מעבד תשובה...');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Gemini שגיאה ${res.status}`);
+    }
+
+    const result = await res.json();
+    const txt = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = txt.match(/\{[\s\S]*?\}/);
+    if (!jsonMatch) throw new Error('תגובה לא תקינה מ-Gemini');
+    progressCb(100, '✅ הושלם (Gemini)');
+    return { data: JSON.parse(jsonMatch[0]), rawText: txt };
+  }
+
   async function startProcessing() {
     if (!selectedFiles.length) return;
-    if (!ocrWorker) { alert('מנוע OCR עדיין נטען — נסה שוב'); return; }
+    const geminiKey = localStorage.getItem('gemini_key');
+    if (!geminiKey && !ocrWorker) { alert('מנוע OCR עדיין נטען — נסה שוב'); return; }
 
     document.getElementById('processBtn').disabled = true;
     document.getElementById('processBtn').textContent = 'מעבד...';
@@ -862,26 +952,35 @@
     });
 
     const results = [], errors = [];
-    try {
-      selectedFiles.forEach((_, i) => setProgress(i, 5, 'ממזער...'));
-      const resized = await Promise.all(selectedFiles.map(f => resizeForOCR(f)));
-      selectedFiles.forEach((_, i) => setProgress(i, 15, 'ממתין לזיהוי...'));
 
-      for (let i = 0; i < resized.length; i++) {
-        setProgress(i, 20, 'מזהה טקסט...');
-        try {
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      try {
+        if (geminiKey) {
+          // === מסלול Gemini AI ===
+          const { data, rawText } = await analyzeWithGemini(
+            file,
+            geminiKey,
+            (pct, txt) => setProgress(i, pct, txt)
+          );
+          results.push({ file, data, index: i, rawText });
+        } else {
+          // === מסלול Tesseract (fallback) ===
+          setProgress(i, 5, 'ממזער...');
+          const resized = await resizeForOCR(file);
+          setProgress(i, 20, 'מזהה טקסט...');
           ocrProgressCallback = p => setProgress(i, 20+Math.round(p*75), `OCR: ${20+Math.round(p*75)}%`);
-          const { data: { text } } = await ocrWorker.recognize(resized[i]);
+          const { data: { text } } = await ocrWorker.recognize(resized);
           ocrProgressCallback = null;
-          setProgress(i, 100, '✅ הושלם');
-          results.push({ file: selectedFiles[i], data: parseFields(text), index: i, rawText: text });
-        } catch(e) {
-          ocrProgressCallback = null;
-          setProgress(i, 100, '❌ נכשל');
-          errors.push({ file: selectedFiles[i], error: e.message });
+          setProgress(i, 100, '✅ הושלם (Tesseract)');
+          results.push({ file, data: parseFields(text), index: i, rawText: text });
         }
+      } catch(e) {
+        ocrProgressCallback = null;
+        setProgress(i, 100, `❌ ${e.message}`);
+        errors.push({ file, error: e.message });
       }
-    } catch(e) { alert('שגיאה: ' + e.message); }
+    }
 
     showResults(results, errors);
     document.getElementById('processBtn').disabled = false;
