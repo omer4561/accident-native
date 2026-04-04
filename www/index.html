@@ -75,6 +75,20 @@
     .ri-btn-open { background: #e8f0fe; color: #1a73e8; }
     .empty-msg { text-align: center; color: #aaa; padding: 32px 16px; font-size: 14px; }
 
+    /* ---- Folder tree ---- */
+    .folder-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 12px 10px; background: #e8f0fe;
+      border-radius: 10px; margin-bottom: 6px;
+      cursor: pointer; font-weight: bold; font-size: 14px; color: #1a73e8;
+      user-select: none;
+    }
+    .folder-row:active { background: #c5d8fd; }
+    .folder-name { flex: 1; }
+    .folder-count { font-size: 11px; background: #1a73e8; color: white; border-radius: 12px; padding: 2px 8px; }
+    .folder-arrow { font-size: 11px; color: #888; }
+    .folder-items { padding: 0 0 6px 8px; }
+
     /* ---- Upload ---- */
     .upload-area {
       background: white; border: 2px dashed #1a73e8;
@@ -216,7 +230,7 @@
       <button onclick="closeHistory()" style="background:none;border:none;color:white;font-size:20px;cursor:pointer">✕</button>
     </div>
     <div class="panel-tabs">
-      <button class="panel-tab active" id="tabReports" onclick="switchTab('reports')">📋 דוחות</button>
+      <button class="panel-tab active" id="tabFolders" onclick="switchTab('folders')">📁 תיקיות</button>
       <button class="panel-tab" id="tabTrash" onclick="switchTab('trash')">🗑️ סל מחזור</button>
     </div>
     <div class="panel-content" id="panelContent"></div>
@@ -321,7 +335,9 @@
 
   // ===================== HISTORY (localStorage) =====================
   let history = JSON.parse(localStorage.getItem('acc_history') || '[]');
-  let currentTab = 'reports';
+  let currentTab = 'folders';
+  let openFolders = new Set();
+  const HE_MONTHS = ['','ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
   function saveHistory() { localStorage.setItem('acc_history', JSON.stringify(history)); }
 
@@ -349,46 +365,96 @@
 
   function switchTab(tab) {
     currentTab = tab;
-    document.getElementById('tabReports').className = 'panel-tab' + (tab === 'reports' ? ' active' : '');
-    document.getElementById('tabTrash').className = 'panel-tab' + (tab === 'trash' ? ' active' : '');
+    document.getElementById('tabFolders').className = 'panel-tab' + (tab === 'folders' ? ' active' : '');
+    document.getElementById('tabTrash').className   = 'panel-tab' + (tab === 'trash'   ? ' active' : '');
     renderPanel();
+  }
+
+  function toggleFolder(key) {
+    if (openFolders.has(key)) openFolders.delete(key);
+    else openFolders.add(key);
+    renderPanel();
+  }
+
+  function folderKey(r) {
+    const parts = (r.folder || '').split('/');
+    const mo = parts[parts.length - 1], yr = parts[parts.length - 2];
+    return (/^\d{4}$/.test(yr) && /^\d{1,2}$/.test(mo)) ? `${yr}/${mo.padStart(2,'0')}` : 'no_date';
+  }
+
+  function folderLabel(key) {
+    if (key === 'no_date') return '📁 ללא תאריך';
+    const [yr, mo] = key.split('/');
+    return `📁 ${HE_MONTHS[parseInt(mo,10)] || mo} ${yr}`;
   }
 
   function renderPanel() {
     const content = document.getElementById('panelContent');
-    const items = history.filter(r => currentTab === 'trash' ? r.trashed : !r.trashed);
 
-    if (items.length === 0) {
-      content.innerHTML = `<div class="empty-msg">${currentTab === 'trash' ? '🗑️ הסל ריק' : '📭 אין דוחות שמורים'}</div>`;
+    if (currentTab === 'trash') {
+      const items = history.filter(r => r.trashed);
+      if (!items.length) { content.innerHTML = '<div class="empty-msg">🗑️ הסל ריק</div>'; return; }
+      content.innerHTML = items.map(r => {
+        const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
+        const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
+        return `<div class="report-item trashed">
+          <div class="ri-plate">🚗 ${plate}</div>
+          <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 🕐 ${r.savedAt}</div>
+          <div class="ri-files">${files}</div>
+          <div class="ri-actions">
+            <button class="ri-btn ri-btn-restore" onclick="restoreReport(${r.id})">♻️ שחזר</button>
+            <button class="ri-btn ri-btn-perm"    onclick="permDelete(${r.id})">🗑️ מחק לצמיתות</button>
+          </div></div>`;
+      }).join('');
       return;
     }
 
-    content.innerHTML = items.map(r => {
-      const plateDisplay = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
-      const dateDisplay = r.date || 'תאריך לא זוהה';
-      const filesDisplay = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
+    // ---- Folders tab ----
+    const active = history.filter(r => !r.trashed);
+    if (!active.length) { content.innerHTML = '<div class="empty-msg">📭 אין תיקיות</div>'; return; }
 
-      if (r.trashed) {
-        return `<div class="report-item trashed">
-          <div class="ri-plate">🚗 ${plateDisplay}</div>
-          <div class="ri-meta">📅 ${dateDisplay} &nbsp; 🕐 ${r.savedAt}</div>
-          <div class="ri-files">${filesDisplay}</div>
-          <div class="ri-actions">
-            <button class="ri-btn ri-btn-restore" onclick="restoreReport(${r.id})">♻️ שחזר</button>
-            <button class="ri-btn ri-btn-perm" onclick="permDelete(${r.id})">🗑️ מחק לצמיתות</button>
-          </div>
-        </div>`;
-      } else {
-        return `<div class="report-item">
-          <div class="ri-plate">🚗 ${plateDisplay}</div>
-          <div class="ri-meta">📅 ${dateDisplay} &nbsp; 👤 ${r.driver || 'לא זוהה'} &nbsp; 🕐 ${r.savedAt}</div>
-          <div class="ri-files">📁 ${r.folder || ''}<br>${filesDisplay}</div>
-          <div class="ri-actions">
-            <button class="ri-btn ri-btn-del" onclick="trashReport(${r.id})">🗑️ מחק</button>
-          </div>
-        </div>`;
+    // Group by year/month
+    const groups = {};
+    for (const r of active) {
+      const k = folderKey(r);
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(r);
+    }
+
+    // Sort newest first
+    const keys = Object.keys(groups).sort((a,b) => {
+      if (a === 'no_date') return 1;
+      if (b === 'no_date') return -1;
+      return b.localeCompare(a);
+    });
+
+    let html = '';
+    for (const k of keys) {
+      const reps = groups[k];
+      const open = openFolders.has(k);
+      const cnt  = reps.length;
+      html += `<div class="folder-row" onclick="toggleFolder('${k}')">
+        <span class="folder-name">${folderLabel(k)}</span>
+        <span class="folder-count">${cnt} דוח${cnt !== 1 ? 'ות' : ''}</span>
+        <span class="folder-arrow">${open ? '▲' : '▼'}</span>
+      </div>`;
+      if (open) {
+        html += '<div class="folder-items">';
+        for (const r of reps) {
+          const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
+          const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
+          html += `<div class="report-item">
+            <div class="ri-plate">🚗 ${plate}</div>
+            <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 👤 ${r.driver || 'לא זוהה'}</div>
+            <div class="ri-files">${files}</div>
+            <div class="ri-actions">
+              <button class="ri-btn ri-btn-del" onclick="event.stopPropagation();trashReport(${r.id})">🗑️ מחק</button>
+            </div></div>`;
+        }
+        html += '</div>';
       }
-    }).join('');
+    }
+    content.innerHTML = html;
   }
 
   function trashReport(id) {
