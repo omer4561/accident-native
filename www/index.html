@@ -554,10 +554,11 @@
     const sep = '[\\s]*[/\\.\\-|\\\\lI][\\s]*';
     const curYear = new Date().getFullYear();
     const datePatterns = [
-      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{4})`), type: 'dmy4' },
-      { rx: new RegExp(`(\\d{4})${sep}(\\d{1,2})${sep}(\\d{1,2})`), type: 'ymd4' },
-      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{2})(?!\\d)`), type: 'dmy2' },
-      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})(?![\\s]*[/\\.\\-|\\\\lI\\d])`), type: 'dm' },
+      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{4})`),         type: 'dmy4' },
+      { rx: new RegExp(`(\\d{4})${sep}(\\d{1,2})${sep}(\\d{1,2})`),         type: 'ymd4' },
+      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{2})(?!\\d)`),  type: 'dmy2' },
+      // FIX: lookahead only blocks if a sep char follows immediately (not digits on next line)
+      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})(?![/\\.\\-\\\\|lI])`),   type: 'dm'   },
     ];
     for (const { rx, type } of datePatterns) {
       const m = text.match(rx);
@@ -577,14 +578,16 @@
   function parseFields(text) {
     const data = { date: null, license_plate: null, driver_name: null };
 
-    // --- DATE: חפש קודם ליד המילה "תאריך" או "בתאריך" (כמו שכתוב בטופס הצבאי) ---
-    const labeledDateRx = /(?:ב?תאריך)[^\d\n]{0,10}([\d][^\n]{1,20})/gi;
+    // 1. ליד תווית "תאריך"/"בתאריך"
+    const labeledDateRx = /(?:ב?תאריך)[^\d\n]{0,15}([\d][^\n]{1,25})/gi;
     let labelMatch;
     while ((labelMatch = labeledDateRx.exec(text)) !== null) {
       const candidate = extractDate(labelMatch[1]);
       if (candidate) { data.date = candidate; break; }
     }
-    // אם לא נמצא ליד תווית — חפש בכל הטקסט
+    // 2. 400 התווים הראשונים — ראש הטופס (שם נמצא התאריך בטפסים הצבאיים)
+    if (!data.date) data.date = extractDate(text.slice(0, 400));
+    // 3. כל הטקסט
     if (!data.date) data.date = extractDate(text);
     const pm = text.match(/\b(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})\b/) || text.match(/\b(\d{7,8})\b/);
     if (pm) data.license_plate = pm[1].length<=3&&pm[2] ? `${pm[1]}-${pm[2]}-${pm[3]}` : pm[1];
