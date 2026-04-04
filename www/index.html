@@ -332,25 +332,20 @@
   }
 
   // ===================== UPDATE CHECK =====================
-  (async function checkUpdate() {
-    try {
-      const res = await fetch('https://omer4561.github.io/accident-native/index.html', { cache: 'no-store' });
-      const html = await res.text();
-      const m = html.match(/const APP_TS = (\d+)/);
-      if (m && parseInt(m[1], 10) > APP_TS) {
-        // הצג מסך עדכון מלא
-        const overlay = document.getElementById('updateOverlay');
-        overlay.style.display = 'flex';
-        // הפעל progress bar
-        requestAnimationFrame(() => {
-          document.getElementById('updateBar').style.width = '100%';
-        });
-        // נווט אחרי 2 שניות (כדי שהמשתמש יראה את ה-animation)
-        setTimeout(() => {
-          location.replace('https://omer4561.github.io/accident-native/index.html?v=' + m[1]);
-        }, 2000);
-      }
-    } catch(e) {}
+  // השוואה מול ה-APP_TS האחרון שנשמר ב-localStorage.
+  // pages.yml מזריק APP_TS חדש בכל deploy → בפתיחה הבאה יוצג מסך עדכון.
+  (function checkUpdate() {
+    if (!APP_TS) return;
+    const stored = parseInt(localStorage.getItem('app_ts') || '0', 10);
+    if (APP_TS > stored) {
+      localStorage.setItem('app_ts', String(APP_TS));
+      const overlay = document.getElementById('updateOverlay');
+      overlay.style.display = 'flex';
+      requestAnimationFrame(() => {
+        document.getElementById('updateBar').style.width = '100%';
+      });
+      setTimeout(() => { overlay.style.display = 'none'; }, 2200);
+    }
   })();
 
   // ===================== HISTORY (localStorage) =====================
@@ -519,7 +514,8 @@
         langPath:   BASE + '/tessdata',
         logger: loggerFn
       });
-      await ocrWorker.setParameters({ tessedit_pageseg_mode: '11' });
+      // PSM 3 = auto page segmentation — עובד הכי טוב לטפסים מודפסים עם שדות מרובים
+      await ocrWorker.setParameters({ tessedit_pageseg_mode: '3' });
       workerReady = true;
       ws.textContent = '✅ מנוע זיהוי מוכן';
       ws.className = 'worker-status ready';
@@ -610,22 +606,36 @@
   function parseFields(text) {
     const data = { date: null, license_plate: null, driver_name: null };
 
-    // 1. ליד תווית "תאריך"/"בתאריך"
-    const labeledDateRx = /(?:ב?תאריך)[^\d\n]{0,15}([\d][^\n]{1,25})/gi;
-    let labelMatch;
-    while ((labelMatch = labeledDateRx.exec(text)) !== null) {
-      const candidate = extractDate(labelMatch[1]);
-      if (candidate) { data.date = candidate; break; }
+    // ---- תאריך ----
+    // 1. ליד תווית תאריך (תומך בצורות שונות של הטופס הצבאי)
+    const dateLabelRx = /(?:תאריך(?:\s*ה?תאונה)?|ב-|בתאריך)[^\d\n]{0,20}([\d][^\n]{1,30})/gi;
+    let lm;
+    while ((lm = dateLabelRx.exec(text)) !== null) {
+      const c = extractDate(lm[1]);
+      if (c) { data.date = c; break; }
     }
-    // 2. 400 התווים הראשונים — ראש הטופס (שם נמצא התאריך בטפסים הצבאיים)
-    if (!data.date) data.date = extractDate(text.slice(0, 400));
+    // 2. שנה מלאה ב-4 ספרות ברצועת 600 תווים ראשונים
+    if (!data.date) data.date = extractDate(text.slice(0, 600));
     // 3. כל הטקסט
     if (!data.date) data.date = extractDate(text);
-    const pm = text.match(/\b(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})\b/)
-            || text.match(/\b(\d{2,3})\s+(\d{2,3})\s+(\d{2,3})\b/)
-            || text.match(/\b(\d{7,8})\b/);
-    if (pm) data.license_plate = pm[1].length<=3&&pm[2] ? `${pm[1]}-${pm[2]}-${pm[3]}` : pm[1];
-    const nm = text.match(/(?:שם|נהג)[^:\n]*[:\s]+([\u0590-\u05FF][^\n]{1,30})/);
+
+    // ---- לוחית רישוי ----
+    // lookbehind/lookahead (?<!\d) (?!\d) יותר מדויקים מ-\b עם תווים עבריים
+    const platePats = [
+      /(?<!\d)(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})(?!\d)/,   // עם מקפים
+      /(?<!\d)(\d{2,3})[ \t](\d{2,3})[ \t](\d{2,3})(?!\d)/,              // עם רווחים
+      /(?<!\d)(\d{7,8})(?!\d)/,                                            // רצופות (צבאי)
+    ];
+    for (const rx of platePats) {
+      const pm = text.match(rx);
+      if (pm) {
+        data.license_plate = pm[2] ? `${pm[1]}-${pm[2]}-${pm[3]}` : pm[1];
+        break;
+      }
+    }
+
+    // ---- שם נהג ----
+    const nm = text.match(/(?:שם(?:\s*מלא)?|נהג|בעל\s*הרכב)[^:\n]{0,10}[:\s]+([\u0590-\u05FF][^\n]{1,30})/);
     if (nm) data.driver_name = nm[1].trim();
     return data;
   }
@@ -757,10 +767,35 @@
       img.onload = () => {
         URL.revokeObjectURL(url);
         const scale = Math.min(1, MAX_OCR_PX / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
         const c = document.createElement('canvas');
-        c.width = Math.round(img.width*scale); c.height = Math.round(img.height*scale);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        c.toBlob(resolve, 'image/jpeg', 0.85);
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // Grayscale + adaptive binarization — שיפור משמעותי לזיהוי טקסט בטפסים
+        const id = ctx.getImageData(0, 0, w, h);
+        const d = id.data;
+        // שלב 1: הפוך ל-grayscale ואסוף פיקסלים
+        const gray = new Uint8Array(w * h);
+        for (let i = 0; i < gray.length; i++) {
+          gray[i] = Math.round(0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2]);
+        }
+        // שלב 2: חשב ממוצע גלובלי לסף אדפטיבי
+        let sum = 0;
+        for (let i = 0; i < gray.length; i++) sum += gray[i];
+        const threshold = Math.round(sum / gray.length * 1.05); // 5% מעל הממוצע
+        // שלב 3: בינריזציה — כהה מהסף → שחור, בהיר → לבן
+        for (let i = 0; i < gray.length; i++) {
+          const val = gray[i] < threshold ? 0 : 255;
+          d[i*4] = d[i*4+1] = d[i*4+2] = val;
+          d[i*4+3] = 255;
+        }
+        ctx.putImageData(id, 0, 0);
+
+        // PNG — ללא artifacts של דחיסת JPEG שמבלבלים את Tesseract
+        c.toBlob(resolve, 'image/png');
       };
       img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
       img.src = url;
