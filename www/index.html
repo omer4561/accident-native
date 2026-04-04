@@ -593,8 +593,8 @@
         }
       }
     }
-    // last resort: DD/MM ללא שנה
-    const dm = text.match(new RegExp(`(\\d{1,2})[\\s]*[/\\.\\-|\\\\lI][\\s]*(\\d{1,2})(?![/\\.\\-\\\\|lI\\d])`));
+    // last resort: DD/MM ללא שנה (למשל 28.3 או 28.3.)
+    const dm = text.match(new RegExp(`(\\d{1,2})[\\s]*[/\\.\\-|\\\\lI][\\s]*(\\d{1,2})(?!\\d)`));
     if (dm) {
       const dd=+dm[1], mm=+dm[2];
       if (mm>=1&&mm<=12&&dd>=1&&dd<=31)
