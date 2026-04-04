@@ -524,25 +524,45 @@
   }
 
   async function saveFile(file, filename, folder) {
-    const subPath = folder ? `דוחות_תאונה/${folder}/${filename}` : `דוחות_תאונה/${filename}`;
+    // English-only path — Hebrew folder names fail on some Android filesystems
+    const subPath = folder ? `Accident_Reports/${folder}/${filename}` : `Accident_Reports/${filename}`;
 
     if (window.Capacitor?.isNativePlatform?.()) {
       const { Filesystem } = window.Capacitor.Plugins;
-      try { await Filesystem.requestPermissions(); } catch(e) {}
+
+      // Request permissions and log result
+      try {
+        const perm = await Filesystem.requestPermissions();
+        console.log('Filesystem permissions:', JSON.stringify(perm));
+      } catch(e) { console.warn('requestPermissions failed:', e.message); }
+
       const base64 = await fileToBase64(file);
-      // EXTERNAL = app-scoped external dir, no MANAGE_EXTERNAL_STORAGE needed
-      // Visible in Files → Android → data → com.accidentreporter.app → files
+
+      // Try 1: EXTERNAL_STORAGE = visible Downloads-equivalent area
+      try {
+        await Filesystem.writeFile({ path: subPath, data: base64, directory: 'EXTERNAL_STORAGE', recursive: true });
+        console.log('Saved to EXTERNAL_STORAGE:', subPath);
+        return { path: subPath, dir: 'EXTERNAL_STORAGE' };
+      } catch(e1) {
+        console.warn('EXTERNAL_STORAGE failed:', e1.message);
+      }
+
+      // Try 2: EXTERNAL = app-scoped external (Android/data/[package]/files/)
       try {
         await Filesystem.writeFile({ path: subPath, data: base64, directory: 'EXTERNAL', recursive: true });
-        return subPath;
-      } catch(e) {
-        // Fallback to private Documents
-        try {
-          await Filesystem.writeFile({ path: subPath, data: base64, directory: 'DOCUMENTS', recursive: true });
-          return subPath;
-        } catch(e2) {
-          throw new Error(e2.message);
-        }
+        console.log('Saved to EXTERNAL:', subPath);
+        return { path: subPath, dir: 'EXTERNAL' };
+      } catch(e2) {
+        console.warn('EXTERNAL failed:', e2.message);
+      }
+
+      // Try 3: DOCUMENTS = private app storage (last resort)
+      try {
+        await Filesystem.writeFile({ path: subPath, data: base64, directory: 'DOCUMENTS', recursive: true });
+        console.log('Saved to DOCUMENTS:', subPath);
+        return { path: subPath, dir: 'DOCUMENTS' };
+      } catch(e3) {
+        throw new Error('שגיאת שמירה: ' + e3.message);
       }
     }
 
@@ -551,7 +571,7 @@
     const a = Object.assign(document.createElement('a'), { href: url, download: filename });
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return filename;
+    return { path: filename, dir: 'download' };
   }
 
   async function saveGroup(key, btn) {
@@ -562,27 +582,39 @@
 
     const merged = items[0].data;
     const date = merged.date;
-    let folder = 'ללא_תאריך';
+    let folder = 'no_date';
     if (date) {
       const p = date.split('/');
       let yy = p[2] ? parseInt(p[2], 10) : new Date().getFullYear();
-      if (yy < 100) yy += 2000;          // 25 → 2025
+      if (yy < 100) yy += 2000;
       const mm = (p[1] || '01').padStart(2, '0');
-      folder = `${yy}/${mm}`;            // e.g. 2025/04
+      folder = `${yy}/${mm}`;
     }
 
     try {
-      const savedPaths = await Promise.all(items.map((item, idx) => {
+      const saveResults = await Promise.all(items.map((item, idx) => {
         const ext = '.' + item.file.name.split('.').pop().toLowerCase();
         const filename = buildFilename(merged, idx+1, items.length>1, ext);
         return saveFile(item.file, filename, folder);
       }));
 
-      // Save to history
-      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, `דוחות_תאונה/${folder}`);
+      const savedPaths = saveResults.map(r => r.path);
+      const savedDir = saveResults[0]?.dir || '?';
+      const folderDisplay = `Accident_Reports/${folder}`;
+
+      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay);
 
       btn.textContent = `✅ נשמר`;
+      btn.title = `נשמר ב: ${savedDir}/${folderDisplay}`;
       btn.style.background = '#34a853';
+
+      // Show user exactly where the file was saved
+      const locMsg = savedDir === 'EXTERNAL_STORAGE' ? 'Downloads/Accident_Reports'
+                   : savedDir === 'EXTERNAL'          ? 'Android/data/com.accidentreporter.app/files/Accident_Reports'
+                   : savedDir === 'DOCUMENTS'         ? 'אחסון פנימי (DOCUMENTS)'
+                   : 'הורד לטלפון';
+      btn.textContent = `✅ נשמר ב: ${locMsg}/${folder}`;
+
       startResetTimer();
     } catch(e) {
       btn.textContent = `❌ ${e.message}`;
