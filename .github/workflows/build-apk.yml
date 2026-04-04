@@ -33,10 +33,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Set APP_BUILD version in index.html
+      - name: Set APP_BUILD and APP_TS in index.html
         run: |
           sed -i "s/const APP_BUILD = [0-9]*/const APP_BUILD = ${{ github.run_number }}/" www/index.html
-          echo "APP_BUILD set to ${{ github.run_number }}"
+          sed -i "s/const APP_TS = [0-9]*/const APP_TS = 1/" www/index.html
+          echo "APP_BUILD=${{ github.run_number }}, APP_TS=1"
 
       - name: Download Tesseract.js files (offline bundle)
         run: |
