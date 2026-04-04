@@ -311,7 +311,7 @@
   })();
 
   const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
-  const MAX_SIZE = 10 * 1024 * 1024;
+  const MAX_SIZE = 100 * 1024 * 1024; // 100MB — no practical limit
   const MAX_OCR_PX = 1400;
 
   let selectedFiles = [];
@@ -487,23 +487,20 @@
 
   // --- Save one file — native (Capacitor) or browser fallback ---
   async function saveFile(file, filename, folder) {
-    const subPath = folder ? `דוחות_תאונה/${folder}/${filename}` : `דוחות_תאונה/${filename}`;
+    // Save under Download/דוחות_תאונה/ — always visible in Android Files app
+    const subPath = folder
+      ? `Download/דוחות_תאונה/${folder}/${filename}`
+      : `Download/דוחות_תאונה/${filename}`;
 
     if (window.Capacitor?.isNativePlatform?.()) {
       const { Filesystem } = window.Capacitor.Plugins;
-
-      // Request storage permission first
       try { await Filesystem.requestPermissions(); } catch(e) {}
-
       const base64 = await fileToBase64(file);
-
-      // Directory enum not available via window.Capacitor.Plugins — use string values directly
-      // 'DOCUMENTS' = app's private Documents folder, always writable in Capacitor 5
       try {
         await Filesystem.writeFile({
           path: subPath,
           data: base64,
-          directory: 'DOCUMENTS',
+          directory: 'EXTERNAL_STORAGE',
           recursive: true
         });
         return subPath;
@@ -544,7 +541,7 @@
       }));
 
       const folderDisplay = window.Capacitor?.isNativePlatform?.()
-        ? `קבצים/דוחות_תאונה/${folder}/`
+        ? `הורדות/דוחות_תאונה/${folder}/`
         : 'הורדות';
       btn.textContent = `✅ נשמר ב-${folderDisplay}`;
       btn.style.background = '#34a853';
