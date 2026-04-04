@@ -300,30 +300,41 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
   // --- Init worker eagerly on page load ---
   (async function initWorker() {
     const ws = document.getElementById('workerStatus');
+
+    const loggerFn = m => {
+      if (m.status === 'recognizing text' && ocrProgressCallback) {
+        ocrProgressCallback(m.progress);
+      }
+    };
+
+    // Try 1: local files (same-origin, fast)
     try {
+      ws.textContent = '⏳ מכין מנוע זיהוי...';
       ocrWorker = await Tesseract.createWorker('heb', 1, {
         workerPath: 'tesseract/worker.min.js',
         corePath:   'tesseract/tesseract-core.wasm.js',
         langPath:   'tesseract/tessdata',
-        logger: m => {
-          if (m.status === 'recognizing text' && ocrProgressCallback) {
-            ocrProgressCallback(m.progress);
-          }
-        }
+        logger: loggerFn
       });
       workerReady = true;
-      ws.textContent = '✅ מנוע זיהוי מוכן';
-      ws.className = 'worker-status ready';
-      setTimeout(() => ws.style.display = 'none', 2000);
-    } catch(e) {
-      ws.textContent = '⚠️ שגיאה בטעינת מנוע OCR — OCR לא יעבוד';
-      ws.style.color = '#c5221f';
-      // Still allow button — user can try manually
+    } catch(e1) {
+      // Try 2: CDN fallback
+      ws.textContent = '⏳ טוען מ-CDN...';
+      try {
+        ocrWorker = await Tesseract.createWorker('heb', 1, { logger: loggerFn });
+        workerReady = true;
+      } catch(e2) {
+        ws.textContent = `⚠️ OCR לא נטען: ${e2.message}`;
+        ws.style.color = '#c5221f';
+        if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
+        return;
+      }
     }
-    // Enable button if files already selected (regardless of worker state)
-    if (selectedFiles.length > 0) {
-      document.getElementById('processBtn').disabled = false;
-    }
+
+    ws.textContent = '✅ מנוע זיהוי מוכן';
+    ws.className = 'worker-status ready';
+    setTimeout(() => ws.style.display = 'none', 2000);
+    if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
   })();
 
   // --- Resize image before OCR (much faster for large photos) ---
