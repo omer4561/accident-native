@@ -603,40 +603,70 @@
     return null;
   }
 
+  // מחלץ לוחית רישוי מטקסט נתון
+  function extractPlate(text) {
+    const pats = [
+      /(?<!\d)(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})(?!\d)/,  // 123-45-678
+      /(?<!\d)(\d{2,3})[ \t](\d{2,3})[ \t](\d{2,3})(?!\d)/,             // 123 45 678
+      /(?<!\d)(\d{7,8})(?!\d)/,                                           // 12345678 צבאי
+    ];
+    for (const rx of pats) {
+      const m = text.match(rx);
+      if (m) return m[2] ? `${m[1]}-${m[2]}-${m[3]}` : m[1];
+    }
+    return null;
+  }
+
   function parseFields(text) {
     const data = { date: null, license_plate: null, driver_name: null };
 
-    // ---- תאריך ----
-    // 1. ליד תווית תאריך (תומך בצורות שונות של הטופס הצבאי)
-    const dateLabelRx = /(?:תאריך(?:\s*ה?תאונה)?|ב-|בתאריך)[^\d\n]{0,20}([\d][^\n]{1,30})/gi;
-    let lm;
-    while ((lm = dateLabelRx.exec(text)) !== null) {
-      const c = extractDate(lm[1]);
+    // ================================================================
+    // תאריך — חיפוש לפי מיקום בטופס 33.1106
+    // ================================================================
+
+    // עמוד 2 — מלבן הצהרת נהג ("מצהיר") ומלבן חלק ג' (חתימת סא"ל)
+    // בשני המקומות האלה רושמים תאריך בדרך כלל
+    const p2Rx = /(?:מצהיר|חלק\s*ג|סא["״׳']?ל|חתימת?\s*(?:קצין|מפקד))[^\d\n]{0,50}([\d][^\n]{1,30})/gi;
+    let m;
+    while ((m = p2Rx.exec(text)) !== null) {
+      const c = extractDate(m[1]);
       if (c) { data.date = c; break; }
     }
-    // 2. שנה מלאה ב-4 ספרות ברצועת 600 תווים ראשונים
-    if (!data.date) data.date = extractDate(text.slice(0, 600));
-    // 3. כל הטקסט
-    if (!data.date) data.date = extractDate(text);
 
-    // ---- לוחית רישוי ----
-    // lookbehind/lookahead (?<!\d) (?!\d) יותר מדויקים מ-\b עם תווים עבריים
-    const platePats = [
-      /(?<!\d)(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})(?!\d)/,   // עם מקפים
-      /(?<!\d)(\d{2,3})[ \t](\d{2,3})[ \t](\d{2,3})(?!\d)/,              // עם רווחים
-      /(?<!\d)(\d{7,8})(?!\d)/,                                            // רצופות (צבאי)
-    ];
-    for (const rx of platePats) {
-      const pm = text.match(rx);
-      if (pm) {
-        data.license_plate = pm[2] ? `${pm[1]}-${pm[2]}-${pm[3]}` : pm[1];
-        break;
+    // עמוד 1 ועמוד 2 — תוויות תאריך רגילות
+    if (!data.date) {
+      const labelRx = /(?:תאריך(?:\s*ה?תאונה)?|בתאריך|ב-)[^\d\n]{0,20}([\d][^\n]{1,30})/gi;
+      while ((m = labelRx.exec(text)) !== null) {
+        const c = extractDate(m[1]);
+        if (c) { data.date = c; break; }
       }
     }
 
-    // ---- שם נהג ----
-    const nm = text.match(/(?:שם(?:\s*מלא)?|נהג|בעל\s*הרכב)[^:\n]{0,10}[:\s]+([\u0590-\u05FF][^\n]{1,30})/);
+    // fallback — 600 תווים ראשונים (ראש הטופס), אחר כך כל הטקסט
+    if (!data.date) data.date = extractDate(text.slice(0, 600));
+    if (!data.date) data.date = extractDate(text);
+
+    // ================================================================
+    // לוחית רישוי — חיפוש לפי מיקום בטופס 33.1106
+    // ================================================================
+
+    // עמוד 1: מלבן שמאל-עליון — תאריך בשורה ראשונה, לוחית שתי שורות מתחת.
+    // בOCR שניהם יופיעו קרובים. מנסים קודם ליד תווית "מספר רכב":
+    const plateLabelRx = /(?:מספר\s*(?:הרכב|רכב|לוחית|זיהוי)|לוחית\s*(?:רישוי|זיהוי)|מס[\'׳.]?\s*רכב)[^\d\n]{0,20}([\d\-–][^\n]{1,20})/gi;
+    while ((m = plateLabelRx.exec(text)) !== null) {
+      const p = extractPlate(m[1]);
+      if (p) { data.license_plate = p; break; }
+    }
+
+    // אם לא נמצא ליד תווית — חפש בכל הטקסט
+    if (!data.license_plate) data.license_plate = extractPlate(text);
+
+    // ================================================================
+    // שם נהג
+    // ================================================================
+    const nm = text.match(/(?:שם(?:\s*מלא)?|שם\s*הנהג|נהג|בעל\s*הרכב)[^:\n]{0,10}[:\s]+([\u0590-\u05FF][^\n]{1,30})/);
     if (nm) data.driver_name = nm[1].trim();
+
     return data;
   }
 
