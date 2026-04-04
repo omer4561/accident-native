@@ -462,7 +462,13 @@
     const merged = items[0].data;
     const date = merged.date;
     let folder = 'ללא_תאריך';
-    if (date) { const p = date.split('/'); folder = `${p[2]}_${p[1]}`; }
+    if (date) {
+      const p = date.split('/');
+      let yy = p[2] ? parseInt(p[2], 10) : new Date().getFullYear();
+      if (yy < 100) yy += 2000;          // 25 → 2025
+      const mm = (p[1] || '01').padStart(2, '0');
+      folder = `${yy}/${mm}`;            // e.g. 2025/04
+    }
 
     try {
       const savedPaths = await Promise.all(items.map((item, idx) => {
