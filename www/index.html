@@ -374,7 +374,7 @@
   // --- File selection ---
   document.getElementById('fileInput').addEventListener('change', function() {
     const newFiles = Array.from(this.files).filter(f =>
-      ALLOWED.includes(f.type) && f.size <= MAX_SIZE
+      f.size <= MAX_SIZE && (f.type.startsWith('image/') || f.name.match(/\.(jpg|jpeg|png|bmp|heic|webp)$/i))
     );
     // Accumulate — don't replace existing selection
     selectedFiles = selectedFiles.concat(newFiles);
@@ -491,23 +491,25 @@
 
     if (window.Capacitor?.isNativePlatform?.()) {
       const { Filesystem, Directory } = window.Capacitor.Plugins;
+
+      // Request storage permission first
+      try {
+        await Filesystem.requestPermissions();
+      } catch(e) { /* continue anyway */ }
+
       const base64 = await fileToBase64(file);
 
-      // Try ExternalStorage (public, user-visible in Files app) first
-      // Fall back to Documents (private) if permission denied
-      for (const dir of [Directory.ExternalStorage, Directory.Documents]) {
-        try {
-          await Filesystem.writeFile({
-            path: subPath,
-            data: base64,
-            directory: dir,
-            recursive: true
-          });
-          return subPath;
-        } catch(e) {
-          if (dir === Directory.Documents) throw new Error(`שגיאת כתיבה: ${e.message}`);
-          // try next dir
-        }
+      // Try Documents (always accessible in Capacitor 5, no legacy flag needed)
+      try {
+        await Filesystem.writeFile({
+          path: subPath,
+          data: base64,
+          directory: Directory.Documents,
+          recursive: true
+        });
+        return subPath;
+      } catch(e) {
+        throw new Error(`שגיאת כתיבה: ${e.message}`);
       }
     }
 
@@ -543,7 +545,7 @@
       }));
 
       const folderDisplay = window.Capacitor?.isNativePlatform?.()
-        ? `Documents/דוחות_תאונה/${folder}/`
+        ? `קבצים/דוחות_תאונה/${folder}/`
         : 'הורדות';
       btn.textContent = `✅ נשמר ב-${folderDisplay}`;
       btn.style.background = '#34a853';
