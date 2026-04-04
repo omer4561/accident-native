@@ -270,6 +270,15 @@
   </div>
 </div>
 
+<div id="updateOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#1a73e8;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:inherit;text-align:center;padding:32px">
+  <div style="font-size:64px;margin-bottom:24px">🔄</div>
+  <div style="font-size:26px;font-weight:700;margin-bottom:12px">עדכון זמין!</div>
+  <div style="font-size:16px;opacity:0.9;margin-bottom:32px">מעדכן את האפליקציה לגרסה החדשה…</div>
+  <div style="width:60%;height:6px;background:rgba(255,255,255,0.3);border-radius:3px;overflow:hidden">
+    <div id="updateBar" style="height:100%;width:0;background:#fff;border-radius:3px;transition:width 1.8s ease"></div>
+  </div>
+</div>
+
 <script>
   // ===================== TOAST =====================
   let toastTimer = null;
@@ -323,14 +332,23 @@
   }
 
   // ===================== UPDATE CHECK =====================
-  // בודק בכל פתיחה אם יש גרסה חדשה ב-gh-pages — מעדכן אוטומטית בשקט
   (async function checkUpdate() {
     try {
       const res = await fetch('https://omer4561.github.io/accident-native/index.html', { cache: 'no-store' });
       const html = await res.text();
       const m = html.match(/const APP_TS = (\d+)/);
       if (m && parseInt(m[1], 10) > APP_TS) {
-        location.replace('https://omer4561.github.io/accident-native/index.html?v=' + m[1]);
+        // הצג מסך עדכון מלא
+        const overlay = document.getElementById('updateOverlay');
+        overlay.style.display = 'flex';
+        // הפעל progress bar
+        requestAnimationFrame(() => {
+          document.getElementById('updateBar').style.width = '100%';
+        });
+        // נווט אחרי 2 שניות (כדי שהמשתמש יראה את ה-animation)
+        setTimeout(() => {
+          location.replace('https://omer4561.github.io/accident-native/index.html?v=' + m[1]);
+        }, 2000);
       }
     } catch(e) {}
   })();
