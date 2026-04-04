@@ -22,6 +22,11 @@ jobs:
           curl -L "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js" -o www/tesseract/tesseract-core.wasm.js
           curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/heb.traineddata.gz" -o www/tesseract/tessdata/heb.traineddata.gz
 
+      - name: Inject build timestamp into index.html
+        run: |
+          TS=$(date -u +%s)
+          sed -i "s/const APP_TS = [0-9]*/const APP_TS = $TS/" www/index.html
+
       - name: Deploy www/ to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:

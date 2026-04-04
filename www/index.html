@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
-  <script src="tesseract/tesseract.min.js"></script>
+  <script src="https://omer4561.github.io/accident-native/tesseract/tesseract.min.js"></script>
+  <script>const APP_TS = 0;</script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -288,7 +289,28 @@
 </div>
 
 <script>
-const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
+  // --- Update check: compare APP_TS in live Pages vs this build ---
+  (async function checkUpdate() {
+    if (!APP_TS) return; // local dev build, skip
+    try {
+      const res = await fetch(
+        'https://omer4561.github.io/accident-native/index.html',
+        { cache: 'no-store' }
+      );
+      const html = await res.text();
+      const m = html.match(/const APP_TS = (\d+)/);
+      if (!m) return;
+      const liveTs = parseInt(m[1], 10);
+      if (liveTs > APP_TS) {
+        // Show native-style Android notification via alert (works in WebView)
+        if (confirm('🆕 יש עדכון לאפליקציה!\nסגור ופתח מחדש כדי לקבל את הגרסה החדשה.')) {
+          location.reload(true);
+        }
+      }
+    } catch(e) { /* offline — silent */ }
+  })();
+
+  const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
   const MAX_SIZE = 10 * 1024 * 1024;
   const MAX_OCR_PX = 1400;
 
@@ -307,28 +329,21 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
       }
     };
 
-    // Try 1: local files (same-origin, fast)
+    const BASE = 'https://omer4561.github.io/accident-native/tesseract';
     try {
       ws.textContent = '⏳ מכין מנוע זיהוי...';
       ocrWorker = await Tesseract.createWorker('heb', 1, {
-        workerPath: 'tesseract/worker.min.js',
-        corePath:   'tesseract/tesseract-core.wasm.js',
-        langPath:   'tesseract/tessdata',
+        workerPath: BASE + '/worker.min.js',
+        corePath:   BASE + '/tesseract-core.wasm.js',
+        langPath:   BASE + '/tessdata',
         logger: loggerFn
       });
       workerReady = true;
-    } catch(e1) {
-      // Try 2: CDN fallback
-      ws.textContent = '⏳ טוען מ-CDN...';
-      try {
-        ocrWorker = await Tesseract.createWorker('heb', 1, { logger: loggerFn });
-        workerReady = true;
-      } catch(e2) {
-        ws.textContent = `⚠️ OCR לא נטען: ${e2.message}`;
-        ws.style.color = '#c5221f';
-        if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
-        return;
-      }
+    } catch(e) {
+      ws.textContent = `⚠️ OCR לא נטען: ${e.message}`;
+      ws.style.color = '#c5221f';
+      if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
+      return;
     }
 
     ws.textContent = '✅ מנוע זיהוי מוכן';
