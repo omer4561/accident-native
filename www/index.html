@@ -2,6 +2,8 @@
 <html dir="rtl" lang="he">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
   <script src="https://omer4561.github.io/accident-native/tesseract/tesseract.min.js"></script>
@@ -321,14 +323,14 @@
   }
 
   // ===================== UPDATE CHECK =====================
+  // בודק בכל פתיחה אם יש גרסה חדשה ב-gh-pages — מעדכן אוטומטית בשקט
   (async function checkUpdate() {
-    if (!APP_TS) return;
     try {
       const res = await fetch('https://omer4561.github.io/accident-native/index.html', { cache: 'no-store' });
       const html = await res.text();
       const m = html.match(/const APP_TS = (\d+)/);
       if (m && parseInt(m[1], 10) > APP_TS) {
-        if (confirm('🆕 יש עדכון לאפליקציה!\nלחץ אישור כדי לטעון עכשיו.')) location.reload(true);
+        location.replace('https://omer4561.github.io/accident-native/index.html?v=' + m[1]);
       }
     } catch(e) {}
   })();
