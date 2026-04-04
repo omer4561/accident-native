@@ -552,26 +552,37 @@
 
   // ===================== PARSE FIELDS =====================
   function extractDate(text) {
-    const sep = '[\\s]*[/\\.\\-|\\\\lI][\\s]*';
     const curYear = new Date().getFullYear();
-    const datePatterns = [
-      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{4})`),         type: 'dmy4' },
-      { rx: new RegExp(`(\\d{4})${sep}(\\d{1,2})${sep}(\\d{1,2})`),         type: 'ymd4' },
-      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{2})(?!\\d)`),  type: 'dmy2' },
-      // FIX: lookahead only blocks if a sep char follows immediately (not digits on next line)
-      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})(?![/\\.\\-\\\\|lI])`),   type: 'dm'   },
+    // sep1: סימני פרידה נפוצים (כולל תווי OCR שגויים l/I במקום /)
+    // sep2: רווחים בלבד — fallback כשOCR לא מזהה את הסלאש
+    const seps = [
+      '[\\s]*[/\\.\\-|\\\\lI][\\s]*',
+      '[\\s]+'
     ];
-    for (const { rx, type } of datePatterns) {
-      const m = text.match(rx);
-      if (!m) continue;
-      let dd, mm, yyyy;
-      if (type === 'dmy4') { dd=+m[1]; mm=+m[2]; yyyy=+m[3]; }
-      else if (type === 'ymd4') { yyyy=+m[1]; mm=+m[2]; dd=+m[3]; }
-      else if (type === 'dmy2') { dd=+m[1]; mm=+m[2]; yyyy=2000+(+m[3]); }
-      else { dd=+m[1]; mm=+m[2]; yyyy=curYear; }
-      if (mm>=1&&mm<=12&&dd>=1&&dd<=31) {
-        return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
+    for (const sep of seps) {
+      const patterns = [
+        { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{4})`),        type: 'dmy4' },
+        { rx: new RegExp(`(\\d{4})${sep}(\\d{1,2})${sep}(\\d{1,2})`),        type: 'ymd4' },
+        { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{2})(?!\\d)`), type: 'dmy2' },
+      ];
+      for (const { rx, type } of patterns) {
+        const m = text.match(rx);
+        if (!m) continue;
+        let dd, mm, yyyy;
+        if (type === 'dmy4') { dd=+m[1]; mm=+m[2]; yyyy=+m[3]; }
+        else if (type === 'ymd4') { yyyy=+m[1]; mm=+m[2]; dd=+m[3]; }
+        else if (type === 'dmy2') { dd=+m[1]; mm=+m[2]; yyyy=2000+(+m[3]); }
+        if (mm>=1&&mm<=12&&dd>=1&&dd<=31) {
+          return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
+        }
       }
+    }
+    // last resort: DD/MM ללא שנה
+    const dm = text.match(new RegExp(`(\\d{1,2})[\\s]*[/\\.\\-|\\\\lI][\\s]*(\\d{1,2})(?![/\\.\\-\\\\|lI\\d])`));
+    if (dm) {
+      const dd=+dm[1], mm=+dm[2];
+      if (mm>=1&&mm<=12&&dd>=1&&dd<=31)
+        return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${curYear}`;
     }
     return null;
   }
@@ -590,7 +601,9 @@
     if (!data.date) data.date = extractDate(text.slice(0, 400));
     // 3. כל הטקסט
     if (!data.date) data.date = extractDate(text);
-    const pm = text.match(/\b(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})\b/) || text.match(/\b(\d{7,8})\b/);
+    const pm = text.match(/\b(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})\b/)
+            || text.match(/\b(\d{2,3})\s+(\d{2,3})\s+(\d{2,3})\b/)
+            || text.match(/\b(\d{7,8})\b/);
     if (pm) data.license_plate = pm[1].length<=3&&pm[2] ? `${pm[1]}-${pm[2]}-${pm[3]}` : pm[1];
     const nm = text.match(/(?:שם|נהג)[^:\n]*[:\s]+([\u0590-\u05FF][^\n]{1,30})/);
     if (nm) data.driver_name = nm[1].trim();
@@ -817,8 +830,10 @@
       const card = document.createElement('div');
       card.className = 'group-card';
 
-      const rawPreview = (items[0].rawText || '').slice(0, 250).replace(/</g,'&lt;');
+      const rawFull = (items[0].rawText || '(ריק)').replace(/</g,'&lt;');
+      const rawPreview = rawFull.slice(0, 300);
       const safeKey = key.replace(/'/g, "\\'");
+      const preId = 'raw_' + safeKey.replace(/[^a-z0-9]/gi,'_');
 
       let pagesHtml = '';
       items.forEach((item, idx) => {
@@ -837,7 +852,9 @@
           <span>👤 ${merged.driver_name || 'לא זוהה'}</span>
           ${multiPage ? `<span>📄 ${items.length} עמודים</span>` : ''}
         </div>
-        <pre style="font-size:10px;background:#f5f5f5;padding:6px;border-radius:6px;margin:6px 0 10px;white-space:pre-wrap;direction:ltr;text-align:left;max-height:100px;overflow-y:auto">${rawPreview}</pre>
+        <pre id="${preId}" style="font-size:10px;background:#f5f5f5;padding:6px;border-radius:6px;margin:6px 0 2px;white-space:pre-wrap;direction:ltr;text-align:left;max-height:100px;overflow-y:auto">${rawPreview}</pre>
+        <button style="font-size:10px;padding:2px 8px;margin-bottom:8px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer"
+          onclick="const el=document.getElementById('${preId}');const full=${JSON.stringify(rawFull)};if(el.dataset.expanded){el.textContent=el.textContent.slice(0,300);delete el.dataset.expanded;this.textContent='הצג הכל'}else{el.textContent=full;el.dataset.expanded=1;this.textContent='הסתר'}">הצג הכל</button>
         <div class="pages-row">
           <button class="page-btn-all" onclick="saveGroup('${safeKey}', this)">
             💾 שמור הכל${multiPage ? ` (${items.length} עמודים)` : ''}<br>
