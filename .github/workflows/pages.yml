@@ -14,6 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Download Tesseract files (same origin = no CORS block in WebView)
+        run: |
+          mkdir -p www/tesseract/tessdata
+          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" -o www/tesseract/tesseract.min.js
+          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js"    -o www/tesseract/worker.min.js
+          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js" -o www/tesseract/tesseract-core.wasm.js
+          curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/heb.traineddata.gz" -o www/tesseract/tessdata/heb.traineddata.gz
+
       - name: Deploy www/ to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:

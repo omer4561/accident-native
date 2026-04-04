@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="tesseract/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -302,6 +302,9 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
     const ws = document.getElementById('workerStatus');
     try {
       ocrWorker = await Tesseract.createWorker('heb', 1, {
+        workerPath: 'tesseract/worker.min.js',
+        corePath:   'tesseract/tesseract-core.wasm.js',
+        langPath:   'tesseract/tessdata',
         logger: m => {
           if (m.status === 'recognizing text' && ocrProgressCallback) {
             ocrProgressCallback(m.progress);
@@ -660,11 +663,6 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
           </button>`;
       });
 
-      // Collect raw text from all pages for debug display
-      const rawAll = items.map((it, idx) =>
-        `--- עמוד ${idx+1} ---\n${it.rawText || ''}`)
-        .join('\n\n');
-
       card.innerHTML = `
         <div class="group-plate">🚗 ${plate}</div>
         <div class="group-meta">
@@ -676,10 +674,6 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp'];
           ${saveAllBtn}
           ${pagesHtml}
         </div>
-        <details style="margin-top:10px">
-          <summary style="font-size:12px;color:#888;cursor:pointer">🔍 טקסט גולמי מ-OCR</summary>
-          <pre style="font-size:11px;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;white-space:pre-wrap;direction:ltr;text-align:left;max-height:200px;overflow-y:auto">${rawAll.replace(/</g,'&lt;')}</pre>
-        </details>
       `;
       resultsList.appendChild(card);
     }
