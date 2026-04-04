@@ -143,16 +143,63 @@
     .summary-bar { background: #e6f4ea; border-radius: 10px; padding: 12px 16px; text-align: center; font-size: 15px; font-weight: bold; color: #1e8e3e; margin-bottom: 12px; }
     .worker-status { font-size: 12px; color: #aaa; text-align: center; margin-bottom: 8px; }
     .worker-status.ready { color: #34a853; }
+
+    /* ---- Settings overlay ---- */
+    .settings-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 300;
+      align-items: center; justify-content: center;
+    }
+    .settings-overlay.open { display: flex; }
+    .settings-box {
+      background: white; border-radius: 16px;
+      width: min(340px, 90vw); padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .settings-title {
+      font-size: 17px; font-weight: bold; margin-bottom: 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .settings-row { margin-bottom: 20px; }
+    .settings-row label { display: block; font-size: 14px; color: #555; margin-bottom: 8px; }
+    .settings-row input[type=range] { width: 100%; accent-color: #1a73e8; }
+    .settings-val { font-size: 22px; font-weight: bold; color: #1a73e8; text-align: center; margin-top: 6px; }
+    .settings-save {
+      width: 100%; padding: 12px;
+      background: #1a73e8; color: white;
+      border: none; border-radius: 10px; font-size: 15px;
+      cursor: pointer; font-weight: bold;
+    }
   </style>
 </head>
 <body>
 
 <header>
   <div class="title">🚗 ארגון דוחות תאונה</div>
-  <button class="menu-btn" onclick="openHistory()" title="היסטוריה">
-    <span></span><span></span><span></span>
-  </button>
+  <div style="display:flex;gap:4px;align-items:center">
+    <button onclick="openSettings()" title="הגדרות"
+      style="background:none;border:none;color:white;font-size:20px;cursor:pointer;padding:8px">⚙️</button>
+    <button class="menu-btn" onclick="openHistory()" title="היסטוריה">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
 </header>
+
+<!-- Settings overlay -->
+<div class="settings-overlay" id="settingsOverlay" onclick="settingsOverlayClick(event)">
+  <div class="settings-box">
+    <div class="settings-title">
+      ⚙️ הגדרות
+      <button onclick="closeSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#555">✕</button>
+    </div>
+    <div class="settings-row">
+      <label>זמן המתנה בין העלאה להעלאה</label>
+      <input type="range" id="delaySlider" min="3" max="60" step="1" oninput="updateDelayLabel(this.value)">
+      <div class="settings-val"><span id="delayLabel">10</span> שניות</div>
+    </div>
+    <button class="settings-save" onclick="saveSettings()">שמור</button>
+  </div>
+</div>
 
 <!-- History side panel -->
 <div class="overlay" id="historyOverlay" onclick="overlayClick(event)">
@@ -197,6 +244,47 @@
 </div>
 
 <script>
+  // ===================== SETTINGS =====================
+  let resetDelay = parseInt(localStorage.getItem('resetDelay') || '10', 10);
+  let resetTimer = null;
+
+  function openSettings() {
+    document.getElementById('delaySlider').value = resetDelay;
+    document.getElementById('delayLabel').textContent = resetDelay;
+    document.getElementById('settingsOverlay').classList.add('open');
+  }
+  function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+  function settingsOverlayClick(e) { if (e.target === e.currentTarget) closeSettings(); }
+  function updateDelayLabel(v) { document.getElementById('delayLabel').textContent = v; }
+  function saveSettings() {
+    resetDelay = parseInt(document.getElementById('delaySlider').value, 10);
+    localStorage.setItem('resetDelay', resetDelay);
+    closeSettings();
+  }
+
+  function startResetTimer() {
+    if (resetTimer) clearTimeout(resetTimer);
+    resetTimer = setTimeout(resetUI, resetDelay * 1000);
+  }
+
+  function resetUI() {
+    selectedFiles = [];
+    document.getElementById('thumbsRow').innerHTML = '';
+    document.getElementById('countBadge').innerHTML = '';
+    document.getElementById('uploadLabel').textContent = 'בחר תמונות לעיבוד';
+    document.getElementById('uploadArea').classList.remove('has-files');
+    document.getElementById('progressSection').classList.remove('visible');
+    document.getElementById('resultsSection').classList.remove('visible');
+    document.getElementById('resultsList').innerHTML = '';
+    document.getElementById('errorsList').innerHTML = '';
+    document.getElementById('progressList').innerHTML = '';
+    const btn = document.getElementById('processBtn');
+    btn.disabled = true;
+    btn.textContent = 'עבד תמונות';
+    btn.style.background = '';
+    window.groupsData = {};
+  }
+
   // ===================== UPDATE CHECK =====================
   (async function checkUpdate() {
     if (!APP_TS) return;
@@ -495,6 +583,7 @@
 
       btn.textContent = `✅ נשמר`;
       btn.style.background = '#34a853';
+      startResetTimer();
     } catch(e) {
       btn.textContent = `❌ ${e.message}`;
       btn.style.background = '#c5221f';
