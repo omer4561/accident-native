@@ -480,7 +480,7 @@
 
   // ===================== OCR WORKER =====================
   const MAX_SIZE = 100 * 1024 * 1024;
-  const MAX_OCR_PX = 1400;
+  const MAX_OCR_PX = 2000;
   let selectedFiles = [];
   let ocrWorker = null;
   let workerReady = false;
@@ -493,12 +493,13 @@
     };
     const BASE = 'https://omer4561.github.io/accident-native/tesseract';
     try {
-      ocrWorker = await Tesseract.createWorker('heb', 1, {
+      ocrWorker = await Tesseract.createWorker('heb+eng', 1, {
         workerPath: BASE + '/worker.min.js',
         corePath:   BASE + '/tesseract-core.wasm.js',
         langPath:   BASE + '/tessdata',
         logger: loggerFn
       });
+      await ocrWorker.setParameters({ tessedit_pageseg_mode: '11' });
       workerReady = true;
       ws.textContent = '✅ מנוע זיהוי מוכן';
       ws.className = 'worker-status ready';
