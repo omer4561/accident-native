@@ -144,6 +144,17 @@
     .worker-status { font-size: 12px; color: #aaa; text-align: center; margin-bottom: 8px; }
     .worker-status.ready { color: #34a853; }
 
+    /* ---- Toast ---- */
+    #saveToast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #222; color: #fff; border-radius: 10px;
+      padding: 10px 18px; font-size: 13px; z-index: 999;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s;
+      max-width: 90vw; text-align: center; line-height: 1.5;
+    }
+    #saveToast.show { opacity: 1; }
+
     /* ---- Settings overlay ---- */
     .settings-overlay {
       display: none; position: fixed; inset: 0;
@@ -176,13 +187,9 @@
 
 <header>
   <div class="title">🚗 ארגון דוחות תאונה</div>
-  <div style="display:flex;gap:4px;align-items:center">
-    <button onclick="openSettings()" title="הגדרות"
-      style="background:none;border:none;color:white;font-size:20px;cursor:pointer;padding:8px">⚙️</button>
-    <button class="menu-btn" onclick="openHistory()" title="היסטוריה">
-      <span></span><span></span><span></span>
-    </button>
-  </div>
+  <button class="menu-btn" onclick="openHistory()" title="היסטוריה">
+    <span></span><span></span><span></span>
+  </button>
 </header>
 
 <!-- Settings overlay -->
@@ -213,9 +220,13 @@
       <button class="panel-tab" id="tabTrash" onclick="switchTab('trash')">🗑️ סל מחזור</button>
     </div>
     <div class="panel-content" id="panelContent"></div>
+    <div style="padding:12px;border-top:1px solid #eee;flex-shrink:0">
+      <button onclick="openSettings()" style="width:100%;padding:10px;background:#f1f3f4;border:none;border-radius:10px;font-size:14px;cursor:pointer;color:#444">⚙️ הגדרות</button>
+    </div>
   </div>
 </div>
 
+<div id="saveToast"></div>
 <div class="container">
   <div class="worker-status" id="workerStatus">⏳ מכין מנוע זיהוי...</div>
 
@@ -244,6 +255,16 @@
 </div>
 
 <script>
+  // ===================== TOAST =====================
+  let toastTimer = null;
+  function showToast(msg, ms = 4000) {
+    const t = document.getElementById('saveToast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
   // ===================== SETTINGS =====================
   let resetDelay = parseInt(localStorage.getItem('resetDelay') || '10', 10);
   let resetTimer = null;
@@ -604,17 +625,14 @@
 
       addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay);
 
-      btn.textContent = `✅ נשמר`;
-      btn.title = `נשמר ב: ${savedDir}/${folderDisplay}`;
+      btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
 
-      // Show user exactly where the file was saved
-      const locMsg = savedDir === 'EXTERNAL_STORAGE' ? 'Downloads/Accident_Reports'
-                   : savedDir === 'EXTERNAL'          ? 'Android/data/com.accidentreporter.app/files/Accident_Reports'
-                   : savedDir === 'DOCUMENTS'         ? 'אחסון פנימי (DOCUMENTS)'
-                   : 'הורד לטלפון';
-      btn.textContent = `✅ נשמר ב: ${locMsg}/${folder}`;
-
+      const locMsg = savedDir === 'EXTERNAL_STORAGE' ? '📂 Downloads/Accident_Reports/' + folder
+                   : savedDir === 'EXTERNAL'  ? '📂 Android/data/com.accidentreporter.app/files/Accident_Reports/' + folder
+                   : savedDir === 'DOCUMENTS' ? '📂 אחסון פנימי/Accident_Reports/' + folder
+                   :                            '📥 הורד לטלפון';
+      showToast(locMsg);
       startResetTimer();
     } catch(e) {
       btn.textContent = `❌ ${e.message}`;
