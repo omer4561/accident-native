@@ -652,8 +652,8 @@
 
     // עמוד 1: מלבן שמאל-עליון — תאריך בשורה ראשונה, לוחית שתי שורות מתחת.
     // בOCR שניהם יופיעו קרובים. מנסים קודם ליד תווית "מספר רכב":
-    // "מספר" בלבד — כפי שרשום בטופס 33.1106 ליד שדה הרכב
-    const plateLabelRx = /(?:מספר(?:\s*(?:הרכב|רכב|לוחית|זיהוי))?|לוחית\s*(?:רישוי|זיהוי)|מס[\'׳.]?\s*רכב)[^\d\n]{0,20}([\d\-–][^\n]{1,20})/gi;
+    // מחפש "מספר"/"מס' רכב" וגם קריאות שגויות של OCR כגון "מסי רכב"/"ולוסה"
+    const plateLabelRx = /(?:מספר(?:\s*(?:הרכב|רכב|לוחית|זיהוי))?|מס[יי׳'.]\s*(?:רכב|ולוסה|ולוחית)|לוחית\s*(?:רישוי|זיהוי)|ולוסה)[^\d\n]{0,20}([\d\-–][^\n]{1,20})/gi;
     while ((m = plateLabelRx.exec(text)) !== null) {
       const p = extractPlate(m[1]);
       if (p) { data.license_plate = p; break; }
@@ -805,27 +805,17 @@
         const ctx = c.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
 
-        // Grayscale + adaptive binarization — שיפור משמעותי לזיהוי טקסט בטפסים
+        // Grayscale בלבד — בינריזציה גלובלית מוחקת כתב יד בצבע בהיר
         const id = ctx.getImageData(0, 0, w, h);
         const d = id.data;
-        // שלב 1: הפוך ל-grayscale ואסוף פיקסלים
-        const gray = new Uint8Array(w * h);
-        for (let i = 0; i < gray.length; i++) {
-          gray[i] = Math.round(0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2]);
-        }
-        // שלב 2: חשב ממוצע גלובלי לסף אדפטיבי
-        let sum = 0;
-        for (let i = 0; i < gray.length; i++) sum += gray[i];
-        const threshold = Math.round(sum / gray.length * 1.05); // 5% מעל הממוצע
-        // שלב 3: בינריזציה — כהה מהסף → שחור, בהיר → לבן
-        for (let i = 0; i < gray.length; i++) {
-          const val = gray[i] < threshold ? 0 : 255;
-          d[i*4] = d[i*4+1] = d[i*4+2] = val;
-          d[i*4+3] = 255;
+        for (let i = 0; i < d.length; i += 4) {
+          const g = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+          d[i] = d[i+1] = d[i+2] = g;
+          d[i+3] = 255;
         }
         ctx.putImageData(id, 0, 0);
 
-        // PNG — ללא artifacts של דחיסת JPEG שמבלבלים את Tesseract
+        // PNG — ללא artifacts של דחיסת JPEG
         c.toBlob(resolve, 'image/png');
       };
       img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
