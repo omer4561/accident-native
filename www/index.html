@@ -487,18 +487,28 @@
 
   // --- Save one file — native (Capacitor) or browser fallback ---
   async function saveFile(file, filename, folder) {
-    const path = folder ? `דוחות_תאונה/${folder}/${filename}` : `דוחות_תאונה/${filename}`;
+    const subPath = folder ? `דוחות_תאונה/${folder}/${filename}` : `דוחות_תאונה/${filename}`;
 
     if (window.Capacitor?.isNativePlatform?.()) {
       const { Filesystem, Directory } = window.Capacitor.Plugins;
       const base64 = await fileToBase64(file);
-      await Filesystem.writeFile({
-        path,
-        data: base64,
-        directory: Directory.Documents,
-        recursive: true
-      });
-      return path;
+
+      // Try ExternalStorage (public, user-visible in Files app) first
+      // Fall back to Documents (private) if permission denied
+      for (const dir of [Directory.ExternalStorage, Directory.Documents]) {
+        try {
+          await Filesystem.writeFile({
+            path: subPath,
+            data: base64,
+            directory: dir,
+            recursive: true
+          });
+          return subPath;
+        } catch(e) {
+          if (dir === Directory.Documents) throw new Error(`שגיאת כתיבה: ${e.message}`);
+          // try next dir
+        }
+      }
     }
 
     // Browser fallback
@@ -538,10 +548,9 @@
       btn.textContent = `✅ נשמר ב-${folderDisplay}`;
       btn.style.background = '#34a853';
     } catch(e) {
-      btn.textContent = '❌ שגיאה בשמירה';
+      btn.textContent = `❌ ${e.message}`;
       btn.style.background = '#c5221f';
       btn.disabled = false;
-      console.error('Save failed:', e);
     }
   }
 
