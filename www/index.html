@@ -375,15 +375,14 @@
   }
 
   // ===================== PARSE FIELDS =====================
-  function parseFields(text) {
-    const data = { date: null, license_plate: null, driver_name: null };
+  function extractDate(text) {
     const sep = '[\\s]*[/\\.\\-|\\\\lI][\\s]*';
     const curYear = new Date().getFullYear();
     const datePatterns = [
       { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{4})`), type: 'dmy4' },
       { rx: new RegExp(`(\\d{4})${sep}(\\d{1,2})${sep}(\\d{1,2})`), type: 'ymd4' },
       { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{2})(?!\\d)`), type: 'dmy2' },
-      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})(?![\\s]*[/\\.\\-|\\\\lI])`), type: 'dm' },
+      { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})(?![\\s]*[/\\.\\-|\\\\lI\\d])`), type: 'dm' },
     ];
     for (const { rx, type } of datePatterns) {
       const m = text.match(rx);
@@ -394,10 +393,24 @@
       else if (type === 'dmy2') { dd=+m[1]; mm=+m[2]; yyyy=2000+(+m[3]); }
       else { dd=+m[1]; mm=+m[2]; yyyy=curYear; }
       if (mm>=1&&mm<=12&&dd>=1&&dd<=31) {
-        data.date = `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
-        break;
+        return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
       }
     }
+    return null;
+  }
+
+  function parseFields(text) {
+    const data = { date: null, license_plate: null, driver_name: null };
+
+    // --- DATE: חפש קודם ליד המילה "תאריך" או "בתאריך" (כמו שכתוב בטופס הצבאי) ---
+    const labeledDateRx = /(?:ב?תאריך)[^\d\n]{0,10}([\d][^\n]{1,20})/gi;
+    let labelMatch;
+    while ((labelMatch = labeledDateRx.exec(text)) !== null) {
+      const candidate = extractDate(labelMatch[1]);
+      if (candidate) { data.date = candidate; break; }
+    }
+    // אם לא נמצא ליד תווית — חפש בכל הטקסט
+    if (!data.date) data.date = extractDate(text);
     const pm = text.match(/\b(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})\b/) || text.match(/\b(\d{7,8})\b/);
     if (pm) data.license_plate = pm[1].length<=3&&pm[2] ? `${pm[1]}-${pm[2]}-${pm[3]}` : pm[1];
     const nm = text.match(/(?:שם|נהג)[^:\n]*[:\s]+([\u0590-\u05FF][^\n]{1,30})/);
