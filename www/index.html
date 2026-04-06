@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
   <script src="https://omer4561.github.io/accident-native/tesseract/tesseract.min.js"></script>
-  <script>const APP_TS = 0;</script>
+  <script>const APP_TS = 0; const GEMINI_KEY = '';</script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; direction: rtl; }
@@ -254,6 +254,17 @@
 <div class="container">
   <div class="worker-status" id="workerStatus">⏳ מכין מנוע זיהוי...</div>
 
+  <!-- כרטיס הגדרת Gemini — מוצג רק אם אין מפתח מובנה ואין מפתח ידני -->
+  <div id="geminiSetupCard" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:12px;padding:14px;margin-bottom:12px;font-size:14px">
+    <div style="font-weight:bold;margin-bottom:8px">🤖 הגדר Gemini AI לזיהוי כתב יד</div>
+    <div style="color:#555;margin-bottom:10px;font-size:12px">קבל מפתח חינמי מ-aistudio.google.com ← Get API key</div>
+    <div style="display:flex;gap:8px">
+      <input id="geminiInlineInput" type="password" placeholder="AIzaSy..." autocomplete="off"
+        style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;direction:ltr">
+      <button onclick="saveGeminiKey()" style="padding:8px 14px;background:#1a73e8;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">שמור</button>
+    </div>
+  </div>
+
   <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
     <div class="icon">📸</div>
     <div class="label" id="uploadLabel">בחר תמונות לעיבוד</div>
@@ -320,6 +331,16 @@
     else localStorage.removeItem('gemini_key');
     updateWorkerStatus();
     closeSettings();
+  }
+
+  function saveGeminiKey() {
+    const key = document.getElementById('geminiInlineInput').value.trim();
+    if (!key) { alert('הזן מפתח Gemini'); return; }
+    localStorage.setItem('gemini_key', key);
+    const card = document.getElementById('geminiSetupCard');
+    if (card) card.style.display = 'none';
+    updateWorkerStatus();
+    workerReady = true;
   }
 
   function updateWorkerStatus() {
@@ -529,9 +550,12 @@
 
   (async function initWorker() {
     const ws = document.getElementById('workerStatus');
+    const setupCard = document.getElementById('geminiSetupCard');
+    const activeKey = GEMINI_KEY || localStorage.getItem('gemini_key');
 
     // אם Gemini מוגדר — מציג סטטוס ומאפשר כפתור מיד, Tesseract לא נחוץ
-    if (localStorage.getItem('gemini_key')) {
+    if (activeKey) {
+      if (setupCard) setupCard.style.display = 'none';
       ws.textContent = '✅ Gemini AI פעיל';
       ws.className = 'worker-status ready';
       setTimeout(() => ws.style.display = 'none', 2000);
@@ -539,6 +563,8 @@
       if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
       return;
     }
+    // אין מפתח — הצג כרטיס הגדרה
+    if (setupCard) setupCard.style.display = '';
 
     // טעינת Tesseract כ-fallback
     const loggerFn = m => {
@@ -887,7 +913,7 @@
     progressCb(30, 'מנתח תמונה...');
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -933,7 +959,7 @@
 
   async function startProcessing() {
     if (!selectedFiles.length) return;
-    const geminiKey = localStorage.getItem('gemini_key');
+    const geminiKey = GEMINI_KEY || localStorage.getItem('gemini_key');
     if (!geminiKey && !ocrWorker) { alert('מנוע OCR עדיין נטען — נסה שוב'); return; }
 
     document.getElementById('processBtn').disabled = true;
@@ -977,6 +1003,20 @@
         }
       } catch(e) {
         ocrProgressCallback = null;
+        // אם Gemini נכשל וTesseract זמין — נסה fallback
+        if (geminiKey && ocrWorker) {
+          try {
+            setProgress(i, 5, '⚠️ Gemini נכשל, מנסה Tesseract...');
+            const resized = await resizeForOCR(file);
+            setProgress(i, 20, 'מזהה טקסט...');
+            ocrProgressCallback = p => setProgress(i, 20+Math.round(p*75), `OCR: ${20+Math.round(p*75)}%`);
+            const { data: { text } } = await ocrWorker.recognize(resized);
+            ocrProgressCallback = null;
+            setProgress(i, 100, '✅ הושלם (Tesseract fallback)');
+            results.push({ file, data: parseFields(text), index: i, rawText: text });
+            continue;
+          } catch(e2) { ocrProgressCallback = null; }
+        }
         setProgress(i, 100, `❌ ${e.message}`);
         errors.push({ file, error: e.message });
       }

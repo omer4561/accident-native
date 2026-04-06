@@ -23,10 +23,14 @@ jobs:
           curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/heb.traineddata.gz" -o www/tesseract/tessdata/heb.traineddata.gz
           curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/eng.traineddata.gz" -o www/tesseract/tessdata/eng.traineddata.gz
 
-      - name: Inject build timestamp into index.html
+      - name: Inject build timestamp and Gemini key into index.html
         run: |
           TS=$(date -u +%s)
           sed -i "s/const APP_TS = [0-9]*/const APP_TS = $TS/" www/index.html
+          GKEY="${{ secrets.GEMINI_KEY }}"
+          if [ -n "$GKEY" ]; then
+            sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
+          fi
 
       - name: Deploy www/ to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4

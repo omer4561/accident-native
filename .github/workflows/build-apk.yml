@@ -33,11 +33,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Set APP_BUILD and APP_TS in index.html
+      - name: Set APP_BUILD, APP_TS and GEMINI_KEY in index.html
         run: |
           sed -i "s/const APP_BUILD = [0-9]*/const APP_BUILD = ${{ github.run_number }}/" www/index.html
-          sed -i "s/const APP_TS = [0-9]*/const APP_TS = 1/" www/index.html
-          echo "APP_BUILD=${{ github.run_number }}, APP_TS=1"
+          sed -i "s/const APP_TS = [0-9]*/const APP_TS = ${{ github.run_number }}/" www/index.html
+          GKEY="${{ secrets.GEMINI_KEY }}"
+          if [ -n "$GKEY" ]; then
+            sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
+          fi
+          echo "APP_BUILD=${{ github.run_number }}, APP_TS=${{ github.run_number }}"
 
       - name: Download Tesseract.js files (offline bundle)
         run: |
@@ -55,6 +59,8 @@ jobs:
         run: npx cap sync android
 
       - name: Generate or load keystore
+        env:
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD || 'AccidentApp2025!' }}
         run: |
           if [ -f "accident-release.keystore" ]; then
             echo "Using existing keystore from repo"
@@ -65,8 +71,8 @@ jobs:
               -keystore $HOME/release.keystore \
               -alias accident \
               -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass AccidentApp2025! \
-              -keypass AccidentApp2025! \
+              -storepass "$KS_PASS" \
+              -keypass "$KS_PASS" \
               -dname "CN=Accident Reporter,C=IL" -noprompt
             cp $HOME/release.keystore accident-release.keystore
             git config user.email "actions@github.com"
@@ -78,12 +84,16 @@ jobs:
           fi
 
       - name: Patch build.gradle — SDK 35 + release signing
+        env:
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD || 'AccidentApp2025!' }}
         run: |
           echo "=== build.gradle BEFORE patch ==="
           cat android/app/build.gradle
           echo "=== END ==="
-          python3 << 'EOF'
-          import re
+          python3 << 'PYEOF'
+          import re, os
+
+          ks_pass = os.environ.get('KS_PASS', 'AccidentApp2025!')
 
           with open('android/app/build.gradle', 'r') as f:
               content = f.read()
@@ -93,14 +103,14 @@ jobs:
           content = re.sub(r'targetSdkVersion \d+',  'targetSdkVersion 35',  content)
 
           # Inject signingConfigs block INSIDE android { ... }
-          signing_block = '''    signingConfigs {
-              release {
+          signing_block = f'''    signingConfigs {{
+              release {{
                   storeFile     file(System.getenv("HOME") + "/release.keystore")
-                  storePassword "AccidentApp2025!"
+                  storePassword "{ks_pass}"
                   keyAlias      "accident"
-                  keyPassword   "AccidentApp2025!"
-              }
-          }
+                  keyPassword   "{ks_pass}"
+              }}
+          }}
           '''
           content = re.sub(
               r'(android\s*\{)',
@@ -120,7 +130,7 @@ jobs:
 
           print("build.gradle patched")
           print(open('android/app/build.gradle').read())
-          EOF
+          PYEOF
 
       - name: Add network security config + media permissions
         run: |
