@@ -31,6 +31,8 @@ jobs:
           if [ -n "$GKEY" ]; then
             sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
           fi
+          # version.json — נבדק ע"י האפליקציה עם ?t=now() לעקיפת cache
+          echo "{\"ts\":$TS}" > www/version.json
 
       - name: Deploy www/ to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4

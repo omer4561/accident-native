@@ -379,20 +379,39 @@
   }
 
   // ===================== UPDATE CHECK =====================
-  // השוואה מול ה-APP_TS האחרון שנשמר ב-localStorage.
-  // pages.yml מזריק APP_TS חדש בכל deploy → בפתיחה הבאה יוצג מסך עדכון.
-  (function checkUpdate() {
-    if (!APP_TS) return;
+  // 1. אם הדף נטען עם APP_TS חדש (WebView טען גרסה טרייה) → הצג overlay.
+  // 2. אם הדף נטען מcache → בדוק version.json עם ?t=now() (עוקף cache)
+  //    ואם יש גרסה חדשה → reload() אוטומטי.
+  function _showUpdateOverlay() {
+    const overlay = document.getElementById('updateOverlay');
+    overlay.style.display = 'flex';
+    requestAnimationFrame(() => { document.getElementById('updateBar').style.width = '100%'; });
+    setTimeout(() => { overlay.style.display = 'none'; }, 2200);
+  }
+
+  (async function checkUpdate() {
     const stored = parseInt(localStorage.getItem('app_ts') || '0', 10);
-    if (APP_TS > stored) {
+
+    // גרסה חדשה נטענה ישירות (WebView לא השתמש ב-cache)
+    if (APP_TS && APP_TS > stored) {
       localStorage.setItem('app_ts', String(APP_TS));
-      const overlay = document.getElementById('updateOverlay');
-      overlay.style.display = 'flex';
-      requestAnimationFrame(() => {
-        document.getElementById('updateBar').style.width = '100%';
-      });
-      setTimeout(() => { overlay.style.display = 'none'; }, 2200);
+      _showUpdateOverlay();
+      return;
     }
+
+    // בדיקה אקטיבית — מביאה version.json עם ?t= כדי לעקוף cache
+    try {
+      const r = await fetch(
+        'https://omer4561.github.io/accident-native/version.json?t=' + Date.now(),
+        { cache: 'no-store' }
+      );
+      if (!r.ok) return;
+      const { ts } = await r.json();
+      if (ts && ts > Math.max(APP_TS || 0, stored)) {
+        // יש גרסה חדשה — reload מאולץ (עוקף cache של WebView)
+        location.reload(true);
+      }
+    } catch(e) { /* אין רשת — אין עדכון */ }
   })();
 
   // ===================== HISTORY (localStorage) =====================
