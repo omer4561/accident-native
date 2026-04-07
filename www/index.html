@@ -1010,10 +1010,14 @@
   }
 
   function buildFilename(data, pageNum, multiPage, ext) {
-    const plate = (data.license_plate || 'unknown_plate').replace(/[^a-zA-Z0-9\u0590-\u05FF\-]/g, '_');
+    const plate = (data.license_plate || 'unknown_plate').replace(/[^a-zA-Z0-9\-]/g, '_');
     let dateStr = 'no_date';
-    if (data.date) { const p = data.date.split('/'); dateStr = `${p[0]}_${p[1]}_${p[2]}`; }
-    return `${plate}_${dateStr}${multiPage ? `_עמוד${pageNum}` : ''}${ext}`;
+    if (data.date) {
+      // תומך בכל הפורמטים: DD.MM.YY, DD/MM/YYYY, YYYY-MM-DD
+      const norm = data.date.trim().replace(/[-\/]/g, '.');
+      dateStr = norm.replace(/\./g, '_');
+    }
+    return `${plate}_${dateStr}${multiPage ? `_p${pageNum}` : ''}${ext}`;
   }
 
   // ===================== MERGE PAGES =====================
@@ -1064,53 +1068,48 @@
   }
 
   async function saveFile(file, filename, folder) {
-    // English-only path — Hebrew folder names fail on some Android filesystems
     const subPath = folder ? `Accident_Reports/${folder}/${filename}` : `Accident_Reports/${filename}`;
 
     if (window.Capacitor?.isNativePlatform?.()) {
       const { Filesystem } = window.Capacitor.Plugins;
-
-      // Request permissions and log result
-      try {
-        const perm = await Filesystem.requestPermissions();
-        console.log('Filesystem permissions:', JSON.stringify(perm));
-      } catch(e) { console.warn('requestPermissions failed:', e.message); }
-
       const base64 = await fileToBase64(file);
 
-      // Try 1: EXTERNAL_STORAGE = visible Downloads-equivalent area
-      try {
-        await Filesystem.writeFile({ path: subPath, data: base64, directory: 'EXTERNAL_STORAGE', recursive: true });
-        console.log('Saved to EXTERNAL_STORAGE:', subPath);
-        return { path: subPath, dir: 'EXTERNAL_STORAGE' };
-      } catch(e1) {
-        console.warn('EXTERNAL_STORAGE failed:', e1.message);
+      // שמירה ל-DCIM/Accident_Reports — נגיש ישירות מהגלריה
+      const dcimPath = `DCIM/Accident_Reports/${folder || 'no_date'}/${filename}`;
+      const TRIES = [
+        { path: dcimPath,  directory: 'EXTERNAL_STORAGE' },
+        { path: subPath,   directory: 'EXTERNAL_STORAGE' },
+        { path: subPath,   directory: 'EXTERNAL' },
+        { path: subPath,   directory: 'DOCUMENTS' },
+      ];
+      let lastErr = '';
+      for (const t of TRIES) {
+        try {
+          await Filesystem.writeFile({ path: t.path, data: base64, directory: t.directory, recursive: true });
+          // סרוק ל-MediaStore — הקובץ יופיע בגלריה
+          try {
+            const { uri } = await Filesystem.getUri({ path: t.path, directory: t.directory });
+            const absolutePath = uri.replace('file://', '');
+            if (window.AndroidMediaScanner) {
+              window.AndroidMediaScanner.scanFile(absolutePath);
+            }
+          } catch(e) { /* silent */ }
+          return { path: t.path, dir: t.directory };
+        } catch(e) {
+          lastErr = e.message;
+        }
       }
-
-      // Try 2: EXTERNAL = app-scoped external (Android/data/[package]/files/)
-      try {
-        await Filesystem.writeFile({ path: subPath, data: base64, directory: 'EXTERNAL', recursive: true });
-        console.log('Saved to EXTERNAL:', subPath);
-        return { path: subPath, dir: 'EXTERNAL' };
-      } catch(e2) {
-        console.warn('EXTERNAL failed:', e2.message);
-      }
-
-      // Try 3: DOCUMENTS = private app storage (last resort)
-      try {
-        await Filesystem.writeFile({ path: subPath, data: base64, directory: 'DOCUMENTS', recursive: true });
-        console.log('Saved to DOCUMENTS:', subPath);
-        return { path: subPath, dir: 'DOCUMENTS' };
-      } catch(e3) {
-        throw new Error('שגיאת שמירה: ' + e3.message);
-      }
+      throw new Error('שגיאת שמירה: ' + lastErr);
     }
 
-    // Browser fallback — download
-    const url = URL.createObjectURL(file);
-    const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+    // Browser / web fallback — trigger download
+    const dataUrl = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+    const a = Object.assign(document.createElement('a'), { href: dataUrl, download: filename });
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
     return { path: filename, dir: 'download' };
   }
 

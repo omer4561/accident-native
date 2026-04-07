@@ -153,6 +153,18 @@ jobs:
           sed -i 's/<application/<application android:requestLegacyExternalStorage="true" android:networkSecurityConfig="@xml\/network_security_config"/' \
             android/app/src/main/AndroidManifest.xml
 
+      - name: Inject MediaScanner plugin into MainActivity
+        run: |
+          MAIN=$(find android -name "MainActivity.java" | head -1)
+          if [ -z "$MAIN" ]; then
+            echo "MainActivity.java not found, skipping"
+            exit 0
+          fi
+          # Add MediaScanner import + addJavascriptInterface after super.onCreate
+          sed -i 's/import com\.getcapacitor\.BridgeActivity;/import com.getcapacitor.BridgeActivity;\nimport android.media.MediaScannerConnection;\nimport android.webkit.JavascriptInterface;/' "$MAIN"
+          sed -i 's/super\.onCreate(savedInstanceState);/super.onCreate(savedInstanceState);\n    getBridge().getWebView().addJavascriptInterface(new Object() {\n      @JavascriptInterface\n      public void scanFile(String path) {\n        MediaScannerConnection.scanFile(getApplicationContext(), new String[]{path}, null, null);\n      }\n    }, "AndroidMediaScanner");/' "$MAIN"
+          echo "Injected MediaScanner into $MAIN"
+
       - name: Build Release APK
         run: |
           cd android
