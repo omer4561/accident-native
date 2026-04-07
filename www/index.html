@@ -919,7 +919,7 @@
 
   function dateToFolder(date) {
     if (!date) return 'no_date';
-    // נרמול מפריד — תומך ב DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, YYYY/MM/DD
+    // נרמול מפריד — תומך ב DD/MM/YYYY, DD-MM-YYYY, DD.MM.YY, YYYY-MM-DD, YYYY/MM/DD
     const norm = date.trim().replace(/[-\.]/g, '/');
     const p = norm.split('/');
     let day, mm, yy;
