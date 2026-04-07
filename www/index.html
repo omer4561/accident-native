@@ -663,7 +663,8 @@
   const MAX_SIZE = 100 * 1024 * 1024;
   let selectedFiles = [];
   let workerReady = false;
-  const _ocrEngine = new OCREngine();
+  let _ocrEngine = null;
+  try { _ocrEngine = new OCREngine(); } catch(e) { console.warn('OCR engine unavailable:', e); }
 
   (async function initWorker() {
     const ws = document.getElementById('workerStatus');
@@ -675,12 +676,13 @@
       ws.className = 'worker-status ready';
       setTimeout(() => ws.style.display = 'none', 2000);
       // OCR מקומי בונה ברקע בשקט
-      _ocrEngine.init().catch(() => {});
+      _ocrEngine?.init().catch(() => {});
       return;
     }
 
     ws.textContent = '⏳ בונה מנוע זיהוי...';
     try {
+      if (!_ocrEngine) throw new Error('OCR engine not loaded');
       await _ocrEngine.init((pct, msg) => { ws.textContent = msg; });
       try {
         const r = await fetch('ocr-weights.json', { cache: 'no-store' });
@@ -1119,11 +1121,19 @@
             data = await analyzeWithGemini(file, (pct, msg) => setProgress(i, pct, msg));
             setProgress(i, 100, '✅ Gemini AI');
           } catch(geminiErr) {
-            setProgress(i, 50, `⚠️ Gemini נכשל, עובר ל-OCR מקומי...`);
-            data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, 50 + pct/2, msg));
+            if (_ocrEngine) {
+              setProgress(i, 50, `⚠️ Gemini נכשל, עובר ל-OCR מקומי...`);
+              data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, 50 + pct/2, msg));
+            } else {
+              setProgress(i, 100, '⚠️ Gemini נכשל — מלא ידנית');
+              data = { date: null, license_plate: null, driver_name: null };
+            }
           }
-        } else {
+        } else if (_ocrEngine) {
           data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, pct, msg));
+        } else {
+          setProgress(i, 100, '⚠️ אין מנוע זיהוי — מלא ידנית');
+          data = { date: null, license_plate: null, driver_name: null };
         }
         results.push({ file, data, index: i, rawText: '' });
       } catch(e) {
