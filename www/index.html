@@ -667,10 +667,21 @@
 
   (async function initWorker() {
     const ws = document.getElementById('workerStatus');
+
+    // אם יש Gemini — מוכנים מיד (OCR מקומי הוא גיבוי בלבד)
+    if (geminiKey) {
+      workerReady = true;
+      ws.textContent = '✅ Gemini AI מוכן';
+      ws.className = 'worker-status ready';
+      setTimeout(() => ws.style.display = 'none', 2000);
+      // OCR מקומי בונה ברקע בשקט
+      _ocrEngine.init().catch(() => {});
+      return;
+    }
+
     ws.textContent = '⏳ בונה מנוע זיהוי...';
     try {
       await _ocrEngine.init((pct, msg) => { ws.textContent = msg; });
-      // טען משקלות רשת נוירונים אם קיימות (מופקות ע"י training/train_model.py)
       try {
         const r = await fetch('ocr-weights.json', { cache: 'no-store' });
         if (r.ok) { _ocrEngine.loadWeights(await r.text()); ws.textContent += ' (NN)'; }
@@ -680,8 +691,10 @@
       ws.className = 'worker-status ready';
       setTimeout(() => ws.style.display = 'none', 2000);
     } catch(e) {
-      ws.textContent = `⚠️ שגיאת אתחול: ${e.message}`;
-      ws.style.color = '#c5221f';
+      workerReady = true; // נאפשר ניסיון גם אם OCR נכשל
+      ws.textContent = `⚠️ OCR לא זמין — Gemini בלבד`;
+      ws.style.color = '#e65100';
+      setTimeout(() => ws.style.display = 'none', 3000);
     }
     if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
   })();
