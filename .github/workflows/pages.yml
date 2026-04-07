@@ -14,24 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Download Tesseract files (same origin = no CORS block in WebView)
-        run: |
-          mkdir -p www/tesseract/tessdata
-          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" -o www/tesseract/tesseract.min.js
-          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js"    -o www/tesseract/worker.min.js
-          curl -L "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js" -o www/tesseract/tesseract-core.wasm.js
-          curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/heb.traineddata.gz" -o www/tesseract/tessdata/heb.traineddata.gz
-          curl -L "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/eng.traineddata.gz" -o www/tesseract/tessdata/eng.traineddata.gz
-
-      - name: Inject build timestamp and Gemini key into index.html
+      - name: Inject build timestamp
         run: |
           TS=$(date -u +%s)
           sed -i "s/const APP_TS = [0-9]*/const APP_TS = $TS/" www/index.html
-          GKEY="${{ secrets.GEMINI_KEY }}"
-          if [ -n "$GKEY" ]; then
-            sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
-          fi
-          # version.json — נבדק ע"י האפליקציה עם ?t=now() לעקיפת cache
           echo "{\"ts\":$TS}" > www/version.json
 
       - name: Deploy www/ to gh-pages branch

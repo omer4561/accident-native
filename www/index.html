@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
-  <script src="https://omer4561.github.io/accident-native/tesseract/tesseract.min.js"></script>
-  <script>const APP_TS = 0; const GEMINI_KEY = '';</script>
+  <script src="ocr-engine.js"></script>
+  <script>const APP_TS = 0;</script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; direction: rtl; }
@@ -197,6 +197,50 @@
       border: none; border-radius: 10px; font-size: 15px;
       cursor: pointer; font-weight: bold;
     }
+
+    /* ---- Editable fields in results ---- */
+    .edit-label { font-size: 11px; color: #888; margin-bottom: 3px; }
+    .edit-field {
+      width: 100%; padding: 7px 10px;
+      border: 1px solid #ddd; border-radius: 7px;
+      font-size: 14px; direction: rtl; background: #fff;
+    }
+    .edit-field:focus { outline: none; border-color: #1a73e8; }
+    .edit-row { margin-bottom: 8px; }
+    .edit-grid { display: flex; gap: 8px; margin-bottom: 8px; }
+    .edit-grid > div { flex: 1; min-width: 0; }
+
+    /* ---- Camera button ---- */
+    .btn-camera { background: #34a853; color: white; margin-bottom: 8px; }
+
+    /* ---- History search ---- */
+    .history-search {
+      padding: 10px 12px; border-bottom: 1px solid #eee; flex-shrink: 0;
+    }
+    .history-search input {
+      width: 100%; padding: 8px 12px;
+      border: 1px solid #ddd; border-radius: 8px;
+      font-size: 14px; direction: rtl;
+    }
+    .history-search input:focus { outline: none; border-color: #1a73e8; }
+
+    /* ---- Export CSV button ---- */
+    .btn-export {
+      width: 100%; padding: 10px; margin-top: 8px;
+      background: #e6f4ea; border: none; border-radius: 10px;
+      font-size: 14px; cursor: pointer; color: #1e8e3e; font-weight: bold;
+    }
+
+    /* ---- Gemini key input ---- */
+    .gemini-input {
+      width: 100%; padding: 10px; border: 1px solid #ddd;
+      border-radius: 8px; font-size: 14px; direction: ltr;
+      margin-bottom: 8px;
+    }
+    .gemini-hint {
+      font-size: 12px; color: #666; line-height: 1.6;
+      background: #f8f9fa; border-radius: 8px; padding: 10px;
+    }
   </style>
 </head>
 <body>
@@ -216,15 +260,19 @@
       <button onclick="closeSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#555">✕</button>
     </div>
     <div class="settings-row">
-      <label>🤖 מפתח Gemini API <span style="font-size:11px;color:#888">(אופציונלי — משפר זיהוי כתב יד)</span></label>
-      <input type="password" id="geminiKeyInput" placeholder="AIza..." autocomplete="off"
-        style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;direction:ltr">
-      <div style="font-size:11px;color:#888;margin-top:4px">
-        מפתח חינמי: <span style="color:#1a73e8">aistudio.google.com</span> → Get API Key
+      <label>🤖 מפתח Gemini AI (לזיהוי מדויק יותר)</label>
+      <input type="password" id="geminiKeyInput" class="gemini-input" placeholder="AIza...">
+      <div class="gemini-hint">
+        <b>איך מקבלים מפתח?</b><br>
+        1. כנס ל-<a href="https://aistudio.google.com/apikey" target="_blank" style="color:#1a73e8">aistudio.google.com/apikey</a><br>
+        2. לחץ "Create API key" → העתק<br>
+        3. הדבק כאן ולחץ שמור<br>
+        <span style="color:#1e8e3e">✅ חינמי — 15 בקשות/דקה</span> &nbsp;
+        <span style="color:#888">🔒 ללא מפתח: OCR מקומי</span>
       </div>
     </div>
     <div class="settings-row">
-      <label>זמן המתנה בין העלאה להעלאה</label>
+      <label>זמן המתנה לאיפוס מסך</label>
       <input type="range" id="delaySlider" min="3" max="60" step="1" oninput="updateDelayLabel(this.value)">
       <div class="settings-val"><span id="delayLabel">10</span> שניות</div>
     </div>
@@ -243,9 +291,13 @@
       <button class="panel-tab active" id="tabFolders" onclick="switchTab('folders')">📁 תיקיות</button>
       <button class="panel-tab" id="tabTrash" onclick="switchTab('trash')">🗑️ סל מחזור</button>
     </div>
+    <div class="history-search">
+      <input type="text" id="historySearch" placeholder="🔍 חפש: לוחית, תאריך, שם נהג..." oninput="renderPanel()">
+    </div>
     <div class="panel-content" id="panelContent"></div>
     <div style="padding:12px;border-top:1px solid #eee;flex-shrink:0">
       <button onclick="openSettings()" style="width:100%;padding:10px;background:#f1f3f4;border:none;border-radius:10px;font-size:14px;cursor:pointer;color:#444">⚙️ הגדרות</button>
+      <button onclick="exportCSV()" class="btn-export">📊 ייצא CSV</button>
     </div>
   </div>
 </div>
@@ -254,22 +306,19 @@
 <div class="container">
   <div class="worker-status" id="workerStatus">⏳ מכין מנוע זיהוי...</div>
 
-  <!-- כרטיס הגדרת Gemini — מוצג רק אם אין מפתח מובנה ואין מפתח ידני -->
-  <div id="geminiSetupCard" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:12px;padding:14px;margin-bottom:12px;font-size:14px">
-    <div style="font-weight:bold;margin-bottom:8px">🤖 הגדר Gemini AI לזיהוי כתב יד</div>
-    <div style="color:#555;margin-bottom:10px;font-size:12px">קבל מפתח חינמי מ-aistudio.google.com ← Get API key</div>
-    <div style="display:flex;gap:8px">
-      <input id="geminiInlineInput" type="password" placeholder="AIzaSy..." autocomplete="off"
-        style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;direction:ltr">
-      <button onclick="saveGeminiKey()" style="padding:8px 14px;background:#1a73e8;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">שמור</button>
-    </div>
-  </div>
 
-  <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
-    <div class="icon">📸</div>
-    <div class="label" id="uploadLabel">בחר תמונות לעיבוד</div>
-    <div class="hint">ניתן לבחור מספר תמונות בבת אחת — כולן יקובצו אוטומטית</div>
-    <div id="countBadge"></div>
+  <div style="display:flex;gap:8px;margin-bottom:8px">
+    <div class="upload-area" id="uploadArea" style="flex:1;margin-bottom:0" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📁</div>
+      <div class="label" id="uploadLabel">בחר תמונות</div>
+      <div class="hint" style="font-size:11px">כמה תמונות בבת אחת</div>
+      <div id="countBadge"></div>
+    </div>
+    <div class="upload-area" id="cameraArea" style="flex:1;margin-bottom:0;border-color:#34a853" onclick="takePicture()">
+      <div class="icon">📷</div>
+      <div class="label" style="color:#34a853">צלם</div>
+      <div class="hint" style="font-size:11px">פתח מצלמה</div>
+    </div>
   </div>
   <div class="thumbs-row" id="thumbsRow"></div>
   <input type="file" id="fileInput" multiple accept="image/*">
@@ -313,11 +362,12 @@
   let resetDelay = parseInt(localStorage.getItem('resetDelay') || '10', 10);
   let resetTimer = null;
 
+  let geminiKey = localStorage.getItem('geminiKey') || '';
+
   function openSettings() {
     document.getElementById('delaySlider').value = resetDelay;
     document.getElementById('delayLabel').textContent = resetDelay;
-    const k = localStorage.getItem('gemini_key') || '';
-    document.getElementById('geminiKeyInput').value = k;
+    document.getElementById('geminiKeyInput').value = geminiKey;
     document.getElementById('settingsOverlay').classList.add('open');
   }
   function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
@@ -326,33 +376,12 @@
   function saveSettings() {
     resetDelay = parseInt(document.getElementById('delaySlider').value, 10);
     localStorage.setItem('resetDelay', resetDelay);
-    const key = document.getElementById('geminiKeyInput').value.trim();
-    if (key) localStorage.setItem('gemini_key', key);
-    else localStorage.removeItem('gemini_key');
-    updateWorkerStatus();
+    const newKey = document.getElementById('geminiKeyInput').value.trim();
+    geminiKey = newKey;
+    if (newKey) localStorage.setItem('geminiKey', newKey);
+    else localStorage.removeItem('geminiKey');
     closeSettings();
-  }
-
-  function saveGeminiKey() {
-    const key = document.getElementById('geminiInlineInput').value.trim();
-    if (!key) { alert('הזן מפתח Gemini'); return; }
-    localStorage.setItem('gemini_key', key);
-    const card = document.getElementById('geminiSetupCard');
-    if (card) card.style.display = 'none';
-    updateWorkerStatus();
-    workerReady = true;
-  }
-
-  function updateWorkerStatus() {
-    const ws = document.getElementById('workerStatus');
-    if (localStorage.getItem('gemini_key')) {
-      ws.textContent = '✅ Gemini AI פעיל';
-      ws.className = 'worker-status ready';
-      ws.style.display = '';
-      setTimeout(() => ws.style.display = 'none', 2000);
-      // אפשר כפתור עיבוד גם ללא Tesseract
-      if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
-    }
+    showToast(newKey ? '✅ מפתח Gemini נשמר' : '✅ הגדרות נשמרו');
   }
 
   function startResetTimer() {
@@ -471,9 +500,17 @@
 
   function renderPanel() {
     const content = document.getElementById('panelContent');
+    const q = (document.getElementById('historySearch')?.value || '').trim().toLowerCase();
+
+    function matchSearch(r) {
+      if (!q) return true;
+      return (r.plate||'').toLowerCase().includes(q) ||
+             (r.date||'').includes(q) ||
+             (r.driver||'').toLowerCase().includes(q);
+    }
 
     if (currentTab === 'trash') {
-      const items = history.filter(r => r.trashed);
+      const items = history.filter(r => r.trashed && matchSearch(r));
       if (!items.length) { content.innerHTML = '<div class="empty-msg">🗑️ הסל ריק</div>'; return; }
       content.innerHTML = items.map(r => {
         const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
@@ -491,7 +528,7 @@
     }
 
     // ---- Folders tab ----
-    const active = history.filter(r => !r.trashed);
+    const active = history.filter(r => !r.trashed && matchSearch(r));
     if (!active.length) { content.innerHTML = '<div class="empty-msg">📭 אין תיקיות</div>'; return; }
 
     // Group by year/month
@@ -559,55 +596,126 @@
     renderPanel();
   }
 
-  // ===================== OCR WORKER =====================
+  function exportCSV() {
+    const active = history.filter(r => !r.trashed);
+    if (!active.length) { showToast('⚠️ אין דוחות לייצוא'); return; }
+    const rows = [['לוחית רישוי','תאריך','שם נהג','תיקייה','נשמר ב']];
+    for (const r of active) {
+      rows.push([r.plate||'', r.date||'', r.driver||'', r.folder||'', r.savedAt||'']);
+    }
+    const csv = '\uFEFF' + rows.map(r =>
+      r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')
+    ).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), {
+      href: url, download: `דוחות_תאונה_${new Date().toLocaleDateString('he-IL').replace(/\./g,'-')}.csv`
+    });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`📊 יוצאו ${active.length} דוחות ל-CSV`);
+  }
+
+  // ===================== GEMINI VISION AI =====================
+  async function analyzeWithGemini(file, onProg) {
+    onProg?.(10, '🤖 שולח ל-Gemini...');
+    const base64 = await fileToBase64(file);
+    const mime = file.type || 'image/jpeg';
+    const prompt = `זהו טופס דוח תאונה צבאי ישראלי 33.1106.
+חלץ את הנתונים הבאים ותחזיר JSON בלבד (ללא מרכאות חיצוניות, ללא הסבר):
+{"date":"DD/MM/YYYY","license_plate":"XXX-XX-XXX","driver_name":"שם"}
+אם שדה לא קיים — null. פורמט תאריך: DD/MM/YYYY בלבד.`;
+
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { text: prompt },
+            { inline_data: { mime_type: mime, data: base64 } }
+          ]}],
+          generation_config: { temperature: 0, max_output_tokens: 150 }
+        })
+      }
+    );
+    if (!resp.ok) {
+      const t = await resp.text();
+      throw new Error(`Gemini ${resp.status}: ${t.slice(0,80)}`);
+    }
+    const json = await resp.json();
+    const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+    onProg?.(80, '🤖 מעבד תגובה...');
+    const match = text.match(/\{[\s\S]*?\}/);
+    if (!match) throw new Error('Gemini: תגובה לא תקינה');
+    const data = JSON.parse(match[0]);
+    return {
+      date: data.date || null,
+      license_plate: data.license_plate || null,
+      driver_name: data.driver_name || null
+    };
+  }
+
+  // ===================== OCR ENGINE (מובנה, ללא הורדות) =====================
   const MAX_SIZE = 100 * 1024 * 1024;
-  const MAX_OCR_PX = 2000;
   let selectedFiles = [];
-  let ocrWorker = null;
   let workerReady = false;
-  let ocrProgressCallback = null;
+  const _ocrEngine = new OCREngine();
 
   (async function initWorker() {
     const ws = document.getElementById('workerStatus');
-    const setupCard = document.getElementById('geminiSetupCard');
-    const activeKey = GEMINI_KEY || localStorage.getItem('gemini_key');
-
-    // אם Gemini מוגדר — מציג סטטוס ומאפשר כפתור מיד, Tesseract לא נחוץ
-    if (activeKey) {
-      if (setupCard) setupCard.style.display = 'none';
-      ws.textContent = '✅ Gemini AI פעיל';
-      ws.className = 'worker-status ready';
-      setTimeout(() => ws.style.display = 'none', 2000);
-      workerReady = true;
-      if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
-      return;
-    }
-    // אין מפתח — הצג כרטיס הגדרה
-    if (setupCard) setupCard.style.display = '';
-
-    // טעינת Tesseract כ-fallback
-    const loggerFn = m => {
-      if (m.status === 'recognizing text' && ocrProgressCallback) ocrProgressCallback(m.progress);
-    };
-    const BASE = 'https://omer4561.github.io/accident-native/tesseract';
+    ws.textContent = '⏳ בונה מנוע זיהוי...';
     try {
-      ocrWorker = await Tesseract.createWorker('heb+eng', 1, {
-        workerPath: BASE + '/worker.min.js',
-        corePath:   BASE + '/tesseract-core.wasm.js',
-        langPath:   BASE + '/tessdata',
-        logger: loggerFn
-      });
-      await ocrWorker.setParameters({ tessedit_pageseg_mode: '3' });
+      await _ocrEngine.init((pct, msg) => { ws.textContent = msg; });
+      // טען משקלות רשת נוירונים אם קיימות (מופקות ע"י training/train_model.py)
+      try {
+        const r = await fetch('ocr-weights.json', { cache: 'no-store' });
+        if (r.ok) { _ocrEngine.loadWeights(await r.text()); ws.textContent += ' (NN)'; }
+      } catch(e) { /* אין קובץ משקלות — template mode */ }
       workerReady = true;
       ws.textContent = '✅ מנוע זיהוי מוכן';
       ws.className = 'worker-status ready';
       setTimeout(() => ws.style.display = 'none', 2000);
     } catch(e) {
-      ws.textContent = `⚠️ OCR לא נטען: ${e.message}`;
+      ws.textContent = `⚠️ שגיאת אתחול: ${e.message}`;
       ws.style.color = '#c5221f';
     }
     if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
   })();
+
+  // ===================== CAMERA =====================
+  async function takePicture() {
+    if (!window.Capacitor?.isNativePlatform?.()) {
+      // On web — trigger file input as fallback
+      document.getElementById('fileInput').click();
+      return;
+    }
+    try {
+      const { Camera } = window.Capacitor.Plugins;
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: 'base64',
+        source: 'CAMERA'
+      });
+      const b64 = image.base64String;
+      const byteChars = atob(b64);
+      const byteArrays = [];
+      for (let o = 0; o < byteChars.length; o += 512) {
+        const sl = byteChars.slice(o, o + 512);
+        const ba = new Uint8Array(sl.length);
+        for (let i = 0; i < sl.length; i++) ba[i] = sl.charCodeAt(i);
+        byteArrays.push(ba);
+      }
+      const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      selectedFiles.push(file);
+      updateUploadUI();
+    } catch(e) {
+      if (!e.message?.includes('cancelled')) showToast('❌ שגיאת מצלמה: ' + e.message);
+    }
+  }
 
   // ===================== FILE SELECTION =====================
   document.getElementById('fileInput').addEventListener('change', function() {
@@ -840,6 +948,37 @@
     return { path: filename, dir: 'download' };
   }
 
+  function updateGroupData(key, field, value) {
+    if (window.groupsData[key]) {
+      window.groupsData[key].forEach(item => { item.data[field] = value || null; });
+    }
+  }
+
+  async function saveSinglePage(key, idx, btn) {
+    const items = window.groupsData[key];
+    if (!items || !items[idx]) return;
+    btn.disabled = true; btn.textContent = '⏳';
+    const item = items[idx];
+    const merged = item.data;
+    const ext = '.' + item.file.name.split('.').pop().toLowerCase();
+    const filename = buildFilename(merged, idx+1, items.length>1, ext);
+    const date = merged.date;
+    let folder = 'no_date';
+    if (date) {
+      const p = date.split('/');
+      let yy = p[2] ? parseInt(p[2],10) : new Date().getFullYear();
+      if (yy < 100) yy += 2000;
+      folder = `${yy}/${(p[1]||'01').padStart(2,'0')}`;
+    }
+    try {
+      await saveFile(item.file, filename, folder);
+      btn.textContent = `✅ עמוד ${idx+1}`;
+      btn.style.background = '#34a853'; btn.style.color = 'white';
+    } catch(e) {
+      btn.textContent = `❌ ${e.message.slice(0,20)}`; btn.disabled = false;
+    }
+  }
+
   async function saveGroup(key, btn) {
     const items = window.groupsData[key];
     if (!items) return;
@@ -924,62 +1063,9 @@
     });
   }
 
-  // ===================== GEMINI VISION =====================
-  async function analyzeWithGemini(file, apiKey, progressCb) {
-    progressCb(10, 'שולח ל-Gemini AI...');
-    const base64 = await fileToBase64(file);
-    const mime = file.type || 'image/jpeg';
-    progressCb(30, 'מנתח תמונה...');
-
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [
-            { inline_data: { mime_type: mime, data: base64 } },
-            { text: `זהו טופס דיווח תאונת דרכים צבאי ישראלי (33.1106). חלץ את הנתונים הבאים:
-
-1. תאריך (date) — מופיע:
-   עמוד 1: במלבן שמאל-עליון, שורה ראשונה מימין
-   עמוד 2: ליד "תאריך פרטי הנהג" או ליד "ניתן אישור תיקון בתאריך" (חלק ג')
-   פורמט תוצאה: DD/MM/YYYY. אם רק יום וחודש — הוסף שנה נוכחית.
-
-2. מספר רכב (license_plate) — מופיע:
-   עמוד 1: שתי שורות מתחת לתאריך, ליד המילה "מספר"
-   עמוד 2: ליד "מספר רישום" בחלק ג'
-   יכול להיות אזרחי (123-45-678) או צבאי (8 ספרות רצופות).
-
-3. שם הנהג (driver_name) — ליד "שם" או "נהג".
-
-החזר אך ורק JSON תקני ללא markdown:
-{"date":"DD/MM/YYYY","license_plate":"מספר","driver_name":"שם"}
-השתמש ב-null לשדות שלא נמצאו.` }
-          ]}],
-          generationConfig: { temperature: 0, maxOutputTokens: 200 }
-        })
-      }
-    );
-
-    progressCb(80, 'מעבד תשובה...');
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Gemini שגיאה ${res.status}`);
-    }
-
-    const result = await res.json();
-    const txt = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const jsonMatch = txt.match(/\{[\s\S]*?\}/);
-    if (!jsonMatch) throw new Error('תגובה לא תקינה מ-Gemini');
-    progressCb(100, '✅ הושלם (Gemini)');
-    return { data: JSON.parse(jsonMatch[0]), rawText: txt };
-  }
-
   async function startProcessing() {
     if (!selectedFiles.length) return;
-    const geminiKey = GEMINI_KEY || localStorage.getItem('gemini_key');
-    if (!geminiKey && !ocrWorker) { alert('מנוע OCR עדיין נטען — נסה שוב'); return; }
+    if (!workerReady) { alert('מנוע OCR עדיין נטען — נסה שוב'); return; }
 
     document.getElementById('processBtn').disabled = true;
     document.getElementById('processBtn').textContent = 'מעבד...';
@@ -1001,41 +1087,20 @@
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
       try {
+        let data;
         if (geminiKey) {
-          // === מסלול Gemini AI ===
-          const { data, rawText } = await analyzeWithGemini(
-            file,
-            geminiKey,
-            (pct, txt) => setProgress(i, pct, txt)
-          );
-          results.push({ file, data, index: i, rawText });
-        } else {
-          // === מסלול Tesseract (fallback) ===
-          setProgress(i, 5, 'ממזער...');
-          const resized = await resizeForOCR(file);
-          setProgress(i, 20, 'מזהה טקסט...');
-          ocrProgressCallback = p => setProgress(i, 20+Math.round(p*75), `OCR: ${20+Math.round(p*75)}%`);
-          const { data: { text } } = await ocrWorker.recognize(resized);
-          ocrProgressCallback = null;
-          setProgress(i, 100, '✅ הושלם (Tesseract)');
-          results.push({ file, data: parseFields(text), index: i, rawText: text });
-        }
-      } catch(e) {
-        ocrProgressCallback = null;
-        // אם Gemini נכשל וTesseract זמין — נסה fallback
-        if (geminiKey && ocrWorker) {
           try {
-            setProgress(i, 5, '⚠️ Gemini נכשל, מנסה Tesseract...');
-            const resized = await resizeForOCR(file);
-            setProgress(i, 20, 'מזהה טקסט...');
-            ocrProgressCallback = p => setProgress(i, 20+Math.round(p*75), `OCR: ${20+Math.round(p*75)}%`);
-            const { data: { text } } = await ocrWorker.recognize(resized);
-            ocrProgressCallback = null;
-            setProgress(i, 100, '✅ הושלם (Tesseract fallback)');
-            results.push({ file, data: parseFields(text), index: i, rawText: text });
-            continue;
-          } catch(e2) { ocrProgressCallback = null; }
+            data = await analyzeWithGemini(file, (pct, msg) => setProgress(i, pct, msg));
+            setProgress(i, 100, '✅ Gemini AI');
+          } catch(geminiErr) {
+            setProgress(i, 50, `⚠️ Gemini נכשל, עובר ל-OCR מקומי...`);
+            data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, 50 + pct/2, msg));
+          }
+        } else {
+          data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, pct, msg));
         }
+        results.push({ file, data, index: i, rawText: '' });
+      } catch(e) {
         setProgress(i, 100, `❌ ${e.message}`);
         errors.push({ file, error: e.message });
       }
@@ -1084,31 +1149,36 @@
       const card = document.createElement('div');
       card.className = 'group-card';
 
-      const rawFull = items[0].rawText || '(ריק)';
       const safeKey = key.replace(/'/g, "\\'");
-      const preId = 'raw_' + safeKey.replace(/[^a-z0-9]/gi,'_');
-      window._rawTexts[preId] = rawFull;
+      const ek = safeKey.replace(/[^a-z0-9]/gi,'_');
 
       let pagesHtml = '';
       items.forEach((item, idx) => {
-        const ext = '.' + item.file.name.split('.').pop().toLowerCase();
-        const filename = buildFilename(merged, idx+1, multiPage, ext);
-        pagesHtml += `<button class="page-btn"
-          onclick="saveFile(selectedFiles[${item.index}],'${filename}','').then(()=>{this.textContent='✅ עמוד ${idx+1}'}).catch(e=>{this.textContent='❌'+e.message})">
-          💾 עמוד ${idx+1}<br><small style="font-size:10px;opacity:0.8">${filename}</small>
+        pagesHtml += `<button class="page-btn" id="pagebtn_${ek}_${idx}"
+          onclick="saveSinglePage('${safeKey}',${idx},this)">
+          💾 עמוד ${idx+1}
         </button>`;
       });
 
       card.innerHTML = `
-        <div class="group-plate">🚗 ${merged.license_plate || 'לוחית לא זוהתה'}</div>
-        <div class="group-meta">
-          <span>📅 ${merged.date || 'תאריך לא זוהה'}</span>
-          <span>👤 ${merged.driver_name || 'לא זוהה'}</span>
-          ${multiPage ? `<span>📄 ${items.length} עמודים</span>` : ''}
+        <div class="edit-grid">
+          <div>
+            <div class="edit-label">🚗 לוחית רישוי</div>
+            <input class="edit-field" id="plate_${ek}" value="${(merged.license_plate||'').replace(/"/g,'&quot;')}"
+              placeholder="לא זוהתה" oninput="updateGroupData('${safeKey}','license_plate',this.value)">
+          </div>
+          <div>
+            <div class="edit-label">📅 תאריך</div>
+            <input class="edit-field" id="date_${ek}" value="${(merged.date||'').replace(/"/g,'&quot;')}"
+              placeholder="לא זוהה" oninput="updateGroupData('${safeKey}','date',this.value)">
+          </div>
         </div>
-        <pre id="${preId}" style="font-size:10px;background:#f5f5f5;padding:6px;border-radius:6px;margin:6px 0 2px;white-space:pre-wrap;direction:ltr;text-align:left;max-height:100px;overflow-y:auto">${rawFull.slice(0,300).replace(/</g,'&lt;')}</pre>
-        <button style="font-size:10px;padding:2px 8px;margin-bottom:8px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer"
-          onclick="alert(window._rawTexts['${preId}'] || '(ריק)')">📋 העתק OCR</button>
+        <div class="edit-row">
+          <div class="edit-label">👤 שם נהג</div>
+          <input class="edit-field" id="driver_${ek}" value="${(merged.driver_name||'').replace(/"/g,'&quot;')}"
+            placeholder="לא זוהה" oninput="updateGroupData('${safeKey}','driver_name',this.value)">
+        </div>
+        ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים</div>` : ''}
         <div class="pages-row">
           <button class="page-btn-all" onclick="saveGroup('${safeKey}', this)">
             💾 שמור הכל${multiPage ? ` (${items.length} עמודים)` : ''}<br>
