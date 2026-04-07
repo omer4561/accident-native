@@ -633,8 +633,8 @@
     const mime = file.type || 'image/jpeg';
     const prompt = `זהו טופס דוח תאונה צבאי ישראלי 33.1106.
 חלץ את הנתונים הבאים ותחזיר JSON בלבד (ללא מרכאות חיצוניות, ללא הסבר):
-{"date":"DD/MM/YYYY","license_plate":"XXX-XX-XXX","driver_name":"שם"}
-אם שדה לא קיים — null. פורמט תאריך: DD/MM/YYYY בלבד.`;
+{"date":"DD.MM.YY","license_plate":"XXX-XX-XXX","driver_name":"שם"}
+אם שדה לא קיים — null. פורמט תאריך: DD.MM.YY בלבד (לדוגמה: 28.4.25).`;
 
     const resp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`,
