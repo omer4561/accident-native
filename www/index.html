@@ -917,6 +917,26 @@
     return data;
   }
 
+  function dateToFolder(date) {
+    if (!date) return 'no_date';
+    // נרמול מפריד — תומך ב DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, YYYY/MM/DD
+    const norm = date.trim().replace(/[-\.]/g, '/');
+    const p = norm.split('/');
+    let day, mm, yy;
+    if (p[0] && p[0].length === 4) {
+      // YYYY/MM/DD
+      yy = parseInt(p[0], 10);
+      mm = parseInt(p[1] || '1', 10);
+    } else {
+      // DD/MM/YYYY
+      mm = parseInt(p[1] || '1', 10);
+      yy = p[2] ? parseInt(p[2], 10) : new Date().getFullYear();
+      if (yy < 100) yy += 2000;
+    }
+    if (!mm || mm < 1 || mm > 12) mm = 1;
+    return `${HE_MONTHS[mm]} ${String(yy).slice(2)}`;
+  }
+
   function buildFilename(data, pageNum, multiPage, ext) {
     const plate = (data.license_plate || 'unknown_plate').replace(/[^a-zA-Z0-9\u0590-\u05FF\-]/g, '_');
     let dateStr = 'no_date';
@@ -999,15 +1019,7 @@
     const merged = item.data;
     const ext = '.' + item.file.name.split('.').pop().toLowerCase();
     const filename = buildFilename(merged, idx+1, items.length>1, ext);
-    const date = merged.date;
-    let folder = 'no_date';
-    if (date) {
-      const p = date.split('/');
-      let yy = p[2] ? parseInt(p[2],10) : new Date().getFullYear();
-      if (yy < 100) yy += 2000;
-      const mm = parseInt(p[1]||'1', 10);
-      folder = `${HE_MONTHS[mm] || p[1]} ${String(yy).slice(2)}`;
-    }
+    const folder = dateToFolder(merged.date);
     try {
       await saveFile(item.file, filename, folder);
       btn.textContent = `✅ עמוד ${idx+1}`;
@@ -1024,15 +1036,7 @@
     btn.textContent = '⏳ שומר...';
 
     const merged = items[0].data;
-    const date = merged.date;
-    let folder = 'no_date';
-    if (date) {
-      const p = date.split('/');
-      let yy = p[2] ? parseInt(p[2], 10) : new Date().getFullYear();
-      if (yy < 100) yy += 2000;
-      const mm = parseInt(p[1]||'1', 10);
-      folder = `${HE_MONTHS[mm] || p[1]} ${String(yy).slice(2)}`;
-    }
+    const folder = dateToFolder(merged.date);
 
     try {
       const saveResults = await Promise.all(items.map((item, idx) => {
