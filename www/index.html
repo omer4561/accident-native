@@ -1111,6 +1111,19 @@
     if (window.groupsData[key]) {
       window.groupsData[key].forEach(item => { item.data[field] = value || null; });
     }
+    // איפוס אוטומטי רק אחרי שכל הקבוצות מולאו
+    if (allGroupsFilled()) startResetTimer();
+    else { if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; } }
+  }
+
+  function allGroupsFilled() {
+    if (!window.groupsData || !Object.keys(window.groupsData).length) return false;
+    for (const [key, items] of Object.entries(window.groupsData)) {
+      const d = items[0]?.data;
+      if (!d) return false;
+      if (!d.license_plate || !d.date || !d.driver_name) return false;
+    }
+    return true;
   }
 
   async function saveSinglePage(key, idx, btn) {
@@ -1159,7 +1172,7 @@
                    : savedDir === 'DOCUMENTS' ? '📂 אחסון פנימי/Accident_Reports/' + folder
                    :                            '📥 הורד לטלפון';
       showToast(locMsg);
-      startResetTimer();
+      if (allGroupsFilled()) startResetTimer();
     } catch(e) {
       btn.textContent = `❌ ${e.message}`;
       btn.style.background = '#c5221f';
@@ -1258,6 +1271,8 @@
     showResults(results, errors);
     document.getElementById('processBtn').disabled = false;
     document.getElementById('processBtn').textContent = `🔍 עבד ${selectedFiles.length} תמונות`;
+    // אם זוהה הכל אוטומטית — מתחיל טיימר מיד
+    if (allGroupsFilled()) startResetTimer();
   }
 
   // ===================== SHOW RESULTS =====================
