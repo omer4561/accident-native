@@ -298,6 +298,7 @@
     <div style="padding:12px;border-top:1px solid #eee;flex-shrink:0">
       <button onclick="openSettings()" style="width:100%;padding:10px;background:#f1f3f4;border:none;border-radius:10px;font-size:14px;cursor:pointer;color:#444">⚙️ הגדרות</button>
       <button onclick="exportCSV()" class="btn-export">📊 ייצא CSV</button>
+      <button onclick="generateLearningReport()" class="btn-export" style="background:#e8f5e9;color:#1b5e20;margin-top:6px">🧠 דוח למידה</button>
     </div>
   </div>
 </div>
@@ -497,15 +498,15 @@
   }
 
   function folderKey(r) {
-    const parts = (r.folder || '').split('/');
-    const mo = parts[parts.length - 1], yr = parts[parts.length - 2];
-    return (/^\d{4}$/.test(yr) && /^\d{1,2}$/.test(mo)) ? `${yr}/${mo.padStart(2,'0')}` : 'no_date';
+    const folder = r.folder || '';
+    const parts = folder.split('/');
+    const last = parts[parts.length - 1];
+    return last || 'no_date';
   }
 
   function folderLabel(key) {
-    if (key === 'no_date') return '📁 ללא תאריך';
-    const [yr, mo] = key.split('/');
-    return `📁 ${HE_MONTHS[parseInt(mo,10)] || mo} ${yr}`;
+    if (!key || key === 'no_date') return '📁 ללא תאריך';
+    return `📁 ${key}`;
   }
 
   function renderPanel() {
@@ -626,15 +627,108 @@
     showToast(`📊 יוצאו ${active.length} דוחות ל-CSV`);
   }
 
+  // ===================== TRAINING / LEARNING =====================
+  let trainingDB = JSON.parse(localStorage.getItem('acc_training') || '[]');
+  function saveTrainingDB() { localStorage.setItem('acc_training', JSON.stringify(trainingDB.slice(0, 1000))); }
+
+  async function computeImageHash(file) {
+    return new Promise(resolve => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        try {
+          const c = document.createElement('canvas');
+          c.width = 8; c.height = 8;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, 8, 8);
+          const d = ctx.getImageData(0, 0, 8, 8).data;
+          const g = [];
+          for (let i = 0; i < 64; i++) g.push((d[i*4] + d[i*4+1] + d[i*4+2]) / 3);
+          const avg = g.reduce((a, b) => a + b) / 64;
+          resolve(g.map(v => v > avg ? '1' : '0').join(''));
+        } catch(e) { resolve(''); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
+      img.src = url;
+    });
+  }
+
+  function hammingDist(h1, h2) {
+    if (!h1 || !h2 || h1.length !== h2.length) return 64;
+    let d = 0;
+    for (let i = 0; i < h1.length; i++) if (h1[i] !== h2[i]) d++;
+    return d;
+  }
+
+  function addToTraining(hash, plate, date, driver) {
+    if (!plate || plate === 'unknown') return;
+    const existing = trainingDB.find(e => hammingDist(e.hash, hash) < 8);
+    if (existing) {
+      existing.count = (existing.count || 1) + 1;
+      existing.plate = plate;
+      if (date) existing.date = date;
+      if (driver) existing.driver = driver;
+      existing.lastSeen = Date.now();
+    } else {
+      trainingDB.unshift({ hash, plate, date: date || null, driver: driver || null, count: 1, lastSeen: Date.now() });
+    }
+    saveTrainingDB();
+  }
+
+  function findTrainingMatch(hash) {
+    let best = null, bestDist = 12;
+    for (const e of trainingDB) {
+      const d = hammingDist(hash, e.hash);
+      if (d < bestDist) { bestDist = d; best = e; }
+    }
+    return best ? { ...best, confidence: Math.round((1 - bestDist / 64) * 100) } : null;
+  }
+
+  function getKnownPlates() {
+    return [...new Set(trainingDB.map(e => e.plate).filter(Boolean))].slice(0, 15);
+  }
+
+  function generateLearningReport() {
+    const active = history.filter(r => !r.trashed);
+    const plates = new Set(active.map(r => r.plate).filter(p => p && p !== 'unknown'));
+    const multiSeen = trainingDB.filter(e => (e.count || 1) > 1);
+    const now = new Date();
+    const thisMonth = active.filter(r => {
+      const d = new Date(r.id);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const lines = [
+      `📊 דוח למידה — דוחות תאונה`,
+      `━━━━━━━━━━━━━━━━━━━`,
+      `📋 סה"כ דוחות: ${active.length}`,
+      `📅 החודש: ${thisMonth.length} דוחות`,
+      `🚗 לוחיות ייחודיות: ${plates.size}`,
+      `🧠 מאגר אימון: ${trainingDB.length} תמונות`,
+      `🔁 רכבים שנראו >1 פעם: ${multiSeen.length}`,
+    ];
+    if (multiSeen.length > 0) {
+      lines.push(``, `לוחיות מוכרות:`);
+      multiSeen.slice(0, 10).forEach(e => lines.push(`• ${e.plate} (${e.count}×)`));
+    }
+    lines.push(`━━━━━━━━━━━━━━━━━━━`, `נוצר: ${now.toLocaleDateString('he-IL')}`);
+    const text = lines.join('\n');
+    const wa = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(wa, '_blank');
+  }
+
   // ===================== GEMINI VISION AI =====================
   async function analyzeWithGemini(file, onProg) {
     onProg?.(10, '🤖 שולח ל-Gemini...');
     const base64 = await fileToBase64(file);
     const mime = file.type || 'image/jpeg';
+    const knownPlates = getKnownPlates();
+    const knownCtx = knownPlates.length > 0
+      ? `\nלוחיות שנראו בעבר במערכת: ${knownPlates.join(', ')}. אם אחת מהן מופיעה בתמונה — בחר אותה בעדיפות.`
+      : '';
     const prompt = `זהו טופס דוח תאונה צבאי ישראלי 33.1106.
 חלץ את הנתונים הבאים ותחזיר JSON בלבד (ללא מרכאות חיצוניות, ללא הסבר):
 {"date":"DD/MM/YYYY","license_plate":"XXX-XX-XXX","driver_name":"שם"}
-אם שדה לא קיים — null. פורמט תאריך: DD/MM/YYYY בלבד.`;
+אם שדה לא קיים — null. פורמט תאריך: DD/MM/YYYY בלבד.${knownCtx}`;
 
     const resp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`,
@@ -1005,7 +1099,8 @@
       const p = date.split('/');
       let yy = p[2] ? parseInt(p[2],10) : new Date().getFullYear();
       if (yy < 100) yy += 2000;
-      folder = `${yy}/${(p[1]||'01').padStart(2,'0')}`;
+      const mm = parseInt(p[1]||'1', 10);
+      folder = `${HE_MONTHS[mm] || p[1]} ${String(yy).slice(2)}`;
     }
     try {
       await saveFile(item.file, filename, folder);
@@ -1029,8 +1124,8 @@
       const p = date.split('/');
       let yy = p[2] ? parseInt(p[2], 10) : new Date().getFullYear();
       if (yy < 100) yy += 2000;
-      const mm = (p[1] || '01').padStart(2, '0');
-      folder = `${yy}/${mm}`;
+      const mm = parseInt(p[1]||'1', 10);
+      folder = `${HE_MONTHS[mm] || p[1]} ${String(yy).slice(2)}`;
     }
 
     try {
@@ -1045,6 +1140,12 @@
       const folderDisplay = `Accident_Reports/${folder}`;
 
       addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay);
+
+      // למידה — שמור כל תמונה שנשמרה כדוגמת אימון
+      for (const item of items) {
+        const h = item.imgHash || await computeImageHash(item.file);
+        addToTraining(h, merged.license_plate, merged.date, merged.driver_name);
+      }
 
       btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
@@ -1124,7 +1225,15 @@
       const file = selectedFiles[i];
       try {
         let data;
-        if (geminiKey) {
+        // בדיקת מאגר אימון — זיהוי רכב מוכר
+        setProgress(i, 5, '🔍 בודק מאגר אימון...');
+        const imgHash = await computeImageHash(file);
+        const trainingMatch = imgHash ? findTrainingMatch(imgHash) : null;
+
+        if (trainingMatch && trainingMatch.confidence >= 88) {
+          setProgress(i, 100, `🧠 מוכר! (${trainingMatch.confidence}% התאמה)`);
+          data = { date: trainingMatch.date, license_plate: trainingMatch.plate, driver_name: trainingMatch.driver };
+        } else if (geminiKey) {
           try {
             data = await analyzeWithGemini(file, (pct, msg) => setProgress(i, pct, msg));
             setProgress(i, 100, '✅ Gemini AI');
@@ -1143,7 +1252,7 @@
           setProgress(i, 100, '⚠️ אין מנוע זיהוי — מלא ידנית');
           data = { date: null, license_plate: null, driver_name: null };
         }
-        results.push({ file, data, index: i, rawText: '' });
+        results.push({ file, data, index: i, rawText: '', imgHash });
       } catch(e) {
         setProgress(i, 100, `❌ ${e.message}`);
         errors.push({ file, error: e.message });
