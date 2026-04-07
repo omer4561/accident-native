@@ -14,10 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Inject build timestamp
+      - name: Inject build timestamp and Gemini key
         run: |
           TS=$(date -u +%s)
           sed -i "s/const APP_TS = [0-9]*/const APP_TS = $TS/" www/index.html
+          GKEY="${{ secrets.GEMINI_KEY }}"
+          if [ -n "$GKEY" ]; then
+            sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
+          fi
           echo "{\"ts\":$TS}" > www/version.json
 
       - name: Deploy www/ to gh-pages branch

@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
   <script src="ocr-engine.js"></script>
-  <script>const APP_TS = 0;</script>
+  <script>const APP_TS = 0; const GEMINI_KEY = '';</script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; direction: rtl; }
@@ -362,7 +362,9 @@
   let resetDelay = parseInt(localStorage.getItem('resetDelay') || '10', 10);
   let resetTimer = null;
 
-  let geminiKey = localStorage.getItem('geminiKey') || '';
+  // GEMINI_KEY מוזרק בזמן בנייה מ-GitHub Secrets (APK)
+  // localStorage מאפשר עקיפה ידנית (web / debug)
+  let geminiKey = localStorage.getItem('geminiKey') || (typeof GEMINI_KEY !== 'undefined' ? GEMINI_KEY : '') || '';
 
   function openSettings() {
     document.getElementById('delaySlider').value = resetDelay;
