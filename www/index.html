@@ -788,22 +788,10 @@
     }
     try {
       const { Camera } = window.Capacitor.Plugins;
-      const { Filesystem } = window.Capacitor.Plugins;
-      const result = await Camera.pickImages({ quality: 85, width: 1920 }); // resize native-side
+      const result = await Camera.pickImages({ quality: 85, width: 1920 });
       for (const photo of result.photos) {
-        let blob;
-        try {
-          const res = await fetch(photo.webPath);
-          if (!res.ok) throw new Error('fetch ' + res.status);
-          blob = await res.blob();
-        } catch {
-          // fallback: קריאה ישירה דרך Filesystem (פותר CORS מ-GitHub Pages)
-          const filePath = decodeURIComponent(photo.webPath.replace(/^.*\/_capacitor_file_/, ''));
-          const { data } = await Filesystem.readFile({ path: filePath });
-          const bin = atob(data); const arr = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-          blob = new Blob([arr], { type: 'image/jpeg' });
-        }
+        const response = await fetch(photo.webPath);
+        const blob = await response.blob();
         const file = new File([blob], `gallery_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`, { type: 'image/jpeg' });
         selectedFiles.push(file);
       }
@@ -824,15 +812,14 @@
       const image = await Camera.getPhoto({
         quality: 85,
         allowEditing: false,
-        resultType: 'base64',
+        resultType: 'uri',
         source: 'CAMERA',
-        width: 1920,          // resize native-side לפני העברה ל-JS — מונע OOM
+        width: 1920,
         correctOrientation: true
       });
-      const binary = atob(image.base64String);
-      const arr = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-      const file = new File([arr.buffer], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const response = await fetch(image.webPath);
+      const blob = await response.blob();
+      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
       selectedFiles.push(file);
       updateUploadUI();
     } catch(e) {
