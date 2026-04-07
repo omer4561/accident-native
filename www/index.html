@@ -308,7 +308,7 @@
 
 
   <div style="display:flex;gap:8px;margin-bottom:8px">
-    <div class="upload-area" id="uploadArea" style="flex:1;margin-bottom:0" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-area" id="uploadArea" style="flex:1;margin-bottom:0" onclick="pickFromGallery()">
       <div class="icon">📁</div>
       <div class="label" id="uploadLabel">בחר תמונות</div>
       <div class="hint" style="font-size:11px">כמה תמונות בבת אחת</div>
@@ -686,10 +686,30 @@
     if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
   })();
 
+  // ===================== GALLERY PICK =====================
+  async function pickFromGallery() {
+    if (!window.Capacitor?.isNativePlatform?.()) {
+      document.getElementById('fileInput').click();
+      return;
+    }
+    try {
+      const { Camera } = window.Capacitor.Plugins;
+      const result = await Camera.pickImages({ quality: 90 });
+      for (const photo of result.photos) {
+        const response = await fetch(photo.webPath);
+        const blob = await response.blob();
+        const file = new File([blob], `gallery_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`, { type: 'image/jpeg' });
+        selectedFiles.push(file);
+      }
+      updateUploadUI();
+    } catch(e) {
+      if (!e.message?.includes('cancelled') && !e.message?.includes('User cancelled')) showToast('❌ שגיאת גלריה: ' + e.message);
+    }
+  }
+
   // ===================== CAMERA =====================
   async function takePicture() {
     if (!window.Capacitor?.isNativePlatform?.()) {
-      // On web — trigger file input as fallback
       document.getElementById('fileInput').click();
       return;
     }
@@ -698,24 +718,16 @@
       const image = await Camera.getPhoto({
         quality: 90,
         allowEditing: false,
-        resultType: 'base64',
+        resultType: 'uri',
         source: 'CAMERA'
       });
-      const b64 = image.base64String;
-      const byteChars = atob(b64);
-      const byteArrays = [];
-      for (let o = 0; o < byteChars.length; o += 512) {
-        const sl = byteChars.slice(o, o + 512);
-        const ba = new Uint8Array(sl.length);
-        for (let i = 0; i < sl.length; i++) ba[i] = sl.charCodeAt(i);
-        byteArrays.push(ba);
-      }
-      const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+      const response = await fetch(image.webPath);
+      const blob = await response.blob();
       const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
       selectedFiles.push(file);
       updateUploadUI();
     } catch(e) {
-      if (!e.message?.includes('cancelled')) showToast('❌ שגיאת מצלמה: ' + e.message);
+      if (!e.message?.includes('cancelled') && !e.message?.includes('User cancelled')) showToast('❌ שגיאת מצלמה: ' + e.message);
     }
   }
 
