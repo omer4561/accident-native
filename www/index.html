@@ -789,7 +789,7 @@
     try {
       const { Camera } = window.Capacitor.Plugins;
       const { Filesystem } = window.Capacitor.Plugins;
-      const result = await Camera.pickImages({ quality: 90 });
+      const result = await Camera.pickImages({ quality: 85, width: 1920 }); // resize native-side
       for (const photo of result.photos) {
         let blob;
         try {
@@ -822,10 +822,12 @@
     try {
       const { Camera } = window.Capacitor.Plugins;
       const image = await Camera.getPhoto({
-        quality: 90,
+        quality: 85,
         allowEditing: false,
         resultType: 'base64',
-        source: 'CAMERA'
+        source: 'CAMERA',
+        width: 1920,          // resize native-side לפני העברה ל-JS — מונע OOM
+        correctOrientation: true
       });
       const binary = atob(image.base64String);
       const arr = new Uint8Array(binary.length);
@@ -1053,7 +1055,8 @@
       img.src = src;
     })));
 
-    const maxW = Math.max(...imgs.map(im => im.naturalWidth));
+    const MAX_W = 1920; // מגבלת canvas — מונע OOM על תמונות 12MP
+    const maxW = Math.min(Math.max(...imgs.map(im => im.naturalWidth)), MAX_W);
     const totalH = imgs.reduce((s, im) => s + Math.round(im.naturalHeight * maxW / im.naturalWidth), 0);
 
     const c = document.createElement('canvas');
