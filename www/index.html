@@ -1299,15 +1299,8 @@
     document.getElementById('summaryBar').textContent =
       `✅ עובדו ${results.length} קבצים${errors.length ? ` | ❌ ${errors.length} נכשלו` : ''}`;
 
-    let unknownCount = 0;
-    const groups = {};
-    for (const r of results) {
-      const plate = r.data.license_plate || 'unknown';
-      const date  = r.data.date || null;
-      const key   = date ? `${plate}__${date}` : `${plate}__no_date_${unknownCount++}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(r);
-    }
+    // כל הקבצים שהועלו יחד = קבוצה אחת (דוח אחד עם כמה עמודים)
+    const groups = { 'report__0': results };
 
     window.groupsData = {};
     for (const [key, items] of Object.entries(groups)) {
