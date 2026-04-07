@@ -1024,13 +1024,20 @@
   async function mergePages(files) {
     if (files.length === 1) return files[0];
 
-    // טען כל תמונה
-    const imgs = await Promise.all(files.map(file => new Promise((resolve, reject) => {
+    // המר כל קובץ ל-base64 data URL תחילה (עוקף CORS ב-WebView)
+    const dataUrls = await Promise.all(files.map(file => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    })));
+
+    // טען תמונות מ-data URL (לא blob URL)
+    const imgs = await Promise.all(dataUrls.map(src => new Promise((resolve, reject) => {
       const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('טעינת תמונה נכשלה')); };
-      img.src = url;
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('טעינת תמונה נכשלה'));
+      img.src = src;
     })));
 
     const maxW = Math.max(...imgs.map(im => im.naturalWidth));
@@ -1048,7 +1055,6 @@
       y += h;
     }
 
-    // toDataURL — אמין יותר מ-toBlob ב-WebView
     const dataUrl = c.toDataURL('image/jpeg', 0.92);
     const base64 = dataUrl.split(',')[1];
     const binary = atob(base64);
