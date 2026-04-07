@@ -348,6 +348,19 @@
 </div>
 
 <script>
+  // ===================== LIVE BOOT — redirect APK to GitHub Pages =====================
+  // The APK is a bootstrapper only. Whenever online, the real app runs from GitHub Pages.
+  // This ensures auto-updates forever — user downloads ONE APK and never again.
+  (async function liveBoot() {
+    const PAGES = 'https://omer4561.github.io/accident-native/';
+    if (!location.href.startsWith('capacitor://')) return; // already on Pages
+    try {
+      const r = await fetch(PAGES + 'version.json?t=' + Date.now(),
+        { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+      if (r.ok) { location.replace(PAGES); }
+    } catch(e) { /* offline — use bundled APK version */ }
+  })();
+
   // ===================== TOAST =====================
   let toastTimer = null;
   function showToast(msg, ms = 4000) {
@@ -409,10 +422,8 @@
     window.groupsData = {};
   }
 
-  // ===================== UPDATE CHECK =====================
-  // 1. אם הדף נטען עם APP_TS חדש (WebView טען גרסה טרייה) → הצג overlay.
-  // 2. אם הדף נטען מcache → בדוק version.json עם ?t=now() (עוקף cache)
-  //    ואם יש גרסה חדשה → reload() אוטומטי.
+  // ===================== UPDATE CHECK (רץ רק על GitHub Pages) =====================
+  // כשיש גרסה חדשה — reload מ-Pages (עוקף cache)
   function _showUpdateOverlay() {
     const overlay = document.getElementById('updateOverlay');
     overlay.style.display = 'flex';
@@ -421,16 +432,13 @@
   }
 
   (async function checkUpdate() {
+    if (location.href.startsWith('capacitor://')) return; // liveBoot handles this
     const stored = parseInt(localStorage.getItem('app_ts') || '0', 10);
-
-    // גרסה חדשה נטענה ישירות (WebView לא השתמש ב-cache)
     if (APP_TS && APP_TS > stored) {
       localStorage.setItem('app_ts', String(APP_TS));
       _showUpdateOverlay();
       return;
     }
-
-    // בדיקה אקטיבית — מביאה version.json עם ?t= כדי לעקוף cache
     try {
       const r = await fetch(
         'https://omer4561.github.io/accident-native/version.json?t=' + Date.now(),
@@ -439,10 +447,10 @@
       if (!r.ok) return;
       const { ts } = await r.json();
       if (ts && ts > Math.max(APP_TS || 0, stored)) {
-        // יש גרסה חדשה — reload מאולץ (עוקף cache של WebView)
-        location.reload(true);
+        localStorage.setItem('app_ts', String(ts));
+        location.reload(true); // on Pages — works correctly
       }
-    } catch(e) { /* אין רשת — אין עדכון */ }
+    } catch(e) { /* אין רשת */ }
   })();
 
   // ===================== HISTORY (localStorage) =====================
