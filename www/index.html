@@ -1092,7 +1092,6 @@
 
   async function startProcessing() {
     if (!selectedFiles.length) return;
-    if (!workerReady) { alert('מנוע OCR עדיין נטען — נסה שוב'); return; }
 
     document.getElementById('processBtn').disabled = true;
     document.getElementById('processBtn').textContent = 'מעבד...';
