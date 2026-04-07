@@ -506,6 +506,12 @@
 
   function folderLabel(key) {
     if (!key || key === 'no_date') return '📁 ללא תאריך';
+    // YYYY_MM → אפריל 26
+    const m = key.match(/^(\d{4})_(\d{2})$/);
+    if (m) {
+      const mm = parseInt(m[2], 10);
+      return `📁 ${HE_MONTHS[mm] || m[2]} ${m[1].slice(2)}`;
+    }
     return `📁 ${key}`;
   }
 
@@ -614,7 +620,8 @@
 
       // אחד
       const mergedFile = await mergePages(files);
-      const folder = r.folder ? r.folder.replace('Accident_Reports/', '') : dateToFolder(r.date);
+      const folderObj = dateToFolder(r.date);
+      const folderPath = folderObj.path;
 
       // שמור קובץ מאוחד
       const plate = r.plate || 'unknown';
@@ -623,7 +630,7 @@
       for (const dir of DIRS) {
         try {
           const base64 = await fileToBase64(mergedFile);
-          const path = `Accident_Reports/${folder}/${filename}`;
+          const path = `Accident_Reports/${folderPath}/${filename}`;
           await Filesystem.writeFile({ path, data: base64, directory: dir, recursive: true });
           saveResult = { path, dir };
           break;
@@ -981,24 +988,25 @@
     return data;
   }
 
+  // מחזיר { path: 'YYYY_MM', label: 'אפריל 26' }
   function dateToFolder(date) {
-    if (!date) return 'no_date';
-    // נרמול מפריד — תומך ב DD/MM/YYYY, DD-MM-YYYY, DD.MM.YY, YYYY-MM-DD, YYYY/MM/DD
+    if (!date) return { path: 'no_date', label: 'ללא תאריך' };
     const norm = date.trim().replace(/[-\.]/g, '/');
     const p = norm.split('/');
-    let day, mm, yy;
+    let mm, yy;
     if (p[0] && p[0].length === 4) {
-      // YYYY/MM/DD
       yy = parseInt(p[0], 10);
       mm = parseInt(p[1] || '1', 10);
     } else {
-      // DD/MM/YYYY
       mm = parseInt(p[1] || '1', 10);
       yy = p[2] ? parseInt(p[2], 10) : new Date().getFullYear();
       if (yy < 100) yy += 2000;
     }
     if (!mm || mm < 1 || mm > 12) mm = 1;
-    return `${HE_MONTHS[mm]} ${String(yy).slice(2)}`;
+    return {
+      path: `${yy}_${String(mm).padStart(2,'0')}`,
+      label: `${HE_MONTHS[mm]} ${String(yy).slice(2)}`
+    };
   }
 
   function buildFilename(data, pageNum, multiPage, ext) {
@@ -1136,7 +1144,7 @@
     const filename = buildFilename(merged, idx+1, items.length>1, ext);
     const folder = dateToFolder(merged.date);
     try {
-      await saveFile(item.file, filename, folder);
+      await saveFile(item.file, filename, folder.path);
       btn.textContent = `✅ עמוד ${idx+1}`;
       btn.style.background = '#34a853'; btn.style.color = 'white';
     } catch(e) {
@@ -1156,20 +1164,20 @@
     try {
       const mergedFile = await mergePages(items.map(i => i.file));
       const filename = buildFilename(merged, 1, false, '.jpg');
-      const saveResult = await saveFile(mergedFile, filename, folder);
+      const saveResult = await saveFile(mergedFile, filename, folder.path);
 
       const savedPaths = [saveResult.path];
       const savedDir = saveResult.dir || '?';
-      const folderDisplay = `Accident_Reports/${folder}`;
+      const folderDisplay = `Accident_Reports/${folder.label}`;
 
       addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay, savedDir);
 
       btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
 
-      const locMsg = savedDir === 'EXTERNAL_STORAGE' ? '📂 Downloads/Accident_Reports/' + folder
-                   : savedDir === 'EXTERNAL'  ? '📂 Android/data/com.accidentreporter.app/files/Accident_Reports/' + folder
-                   : savedDir === 'DOCUMENTS' ? '📂 אחסון פנימי/Accident_Reports/' + folder
+      const locMsg = savedDir === 'EXTERNAL_STORAGE' ? '📂 Downloads/Accident_Reports/' + folder.label
+                   : savedDir === 'EXTERNAL'  ? '📂 Android/data/.../Accident_Reports/' + folder.label
+                   : savedDir === 'DOCUMENTS' ? '📂 אחסון פנימי/Accident_Reports/' + folder.label
                    :                            '📥 הורד לטלפון';
       showToast(locMsg);
       if (allGroupsFilled()) startResetTimer();
