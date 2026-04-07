@@ -461,7 +461,7 @@
 
   function saveHistory() { localStorage.setItem('acc_history', JSON.stringify(history)); }
 
-  function addReportToHistory(plate, date, driver, filePaths, folder) {
+  function addReportToHistory(plate, date, driver, filePaths, folder, dir) {
     history.unshift({
       id: Date.now(),
       plate: plate || 'unknown',
@@ -469,6 +469,7 @@
       driver: driver || '',
       files: filePaths,
       folder: folder,
+      dir: dir || null,
       trashed: false,
       savedAt: new Date().toLocaleString('he-IL')
     });
@@ -576,6 +577,7 @@
             <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 👤 ${r.driver || 'לא זוהה'}</div>
             <div class="ri-files">${files}</div>
             <div class="ri-actions">
+              ${r.files && r.files.length > 1 ? `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();mergeHistoryReport(${r.id})">🔗 קבץ</button>` : ''}
               <button class="ri-btn ri-btn-del" onclick="event.stopPropagation();trashReport(${r.id})">🗑️ מחק</button>
             </div></div>`;
         }
@@ -583,6 +585,68 @@
       }
     }
     content.innerHTML = html;
+  }
+
+  async function mergeHistoryReport(id) {
+    const r = history.find(x => x.id === id);
+    if (!r || !r.files || r.files.length < 2) return;
+    showToast('⏳ מקבץ קבצים...');
+    try {
+      if (!window.Capacitor?.isNativePlatform?.()) { showToast('⚠️ זמין רק באפליקציה'); return; }
+      const { Filesystem } = window.Capacitor.Plugins;
+      const DIRS = r.dir ? [r.dir] : ['EXTERNAL_STORAGE', 'EXTERNAL', 'DOCUMENTS'];
+
+      // קרא כל קובץ חזרה
+      const files = [];
+      for (const path of r.files) {
+        let data = null;
+        for (const dir of DIRS) {
+          try {
+            const res = await Filesystem.readFile({ path, directory: dir });
+            data = res.data;
+            break;
+          } catch(e) { /* נסה directory הבא */ }
+        }
+        if (!data) throw new Error(`לא נמצא: ${path.split('/').pop()}`);
+        const blob = await fetch(`data:image/jpeg;base64,${data}`).then(r => r.blob());
+        files.push(new File([blob], path.split('/').pop(), { type: 'image/jpeg' }));
+      }
+
+      // אחד
+      const mergedFile = await mergePages(files);
+      const folder = r.folder ? r.folder.replace('Accident_Reports/', '') : dateToFolder(r.date);
+
+      // שמור קובץ מאוחד
+      const plate = r.plate || 'unknown';
+      const filename = `${plate}_${r.date || 'no_date'}_merged.jpg`.replace(/[\/\\:*?"<>|]/g, '_');
+      let saveResult = null;
+      for (const dir of DIRS) {
+        try {
+          const base64 = await fileToBase64(mergedFile);
+          const path = `Accident_Reports/${folder}/${filename}`;
+          await Filesystem.writeFile({ path, data: base64, directory: dir, recursive: true });
+          saveResult = { path, dir };
+          break;
+        } catch(e) { /* נסה הבא */ }
+      }
+      if (!saveResult) throw new Error('שמירה נכשלה');
+
+      // מחק קבצים ישנים
+      for (const path of r.files) {
+        for (const dir of DIRS) {
+          try { await Filesystem.deleteFile({ path, directory: dir }); break; } catch(e) {}
+        }
+      }
+
+      // עדכן היסטוריה
+      r.files = [saveResult.path];
+      r.dir = saveResult.dir;
+      saveHistory();
+      renderPanel();
+      showToast('✅ קובץ מאוחד נשמר');
+    } catch(e) {
+      showToast('❌ ' + e.message);
+    }
   }
 
   function trashReport(id) {
@@ -1085,7 +1149,7 @@
       const savedDir = saveResult.dir || '?';
       const folderDisplay = `Accident_Reports/${folder}`;
 
-      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay);
+      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay, savedDir);
 
       btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
