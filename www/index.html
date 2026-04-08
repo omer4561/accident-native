@@ -1378,13 +1378,14 @@
     const folder = dateToFolder(merged.date);
 
     try {
-      const mergedFile = await mergePages(items.map(i => i.file));
-      const ext = items.length > 1 ? '.pdf' : '.jpg';
-      const filename = buildFilename(merged, 1, false, ext);
-      const saveResult = await saveFile(mergedFile, filename, folder.path);
-
-      const savedPaths = [saveResult.path];
-      const savedDir = saveResult.dir || '?';
+      const multiPage = items.length > 1;
+      const savedPaths = [];
+      for (let i = 0; i < items.length; i++) {
+        const filename = buildFilename(merged, i + 1, multiPage, '.jpg');
+        const saveResult = await saveFile(items[i].file, filename, folder.path);
+        savedPaths.push(saveResult.path);
+      }
+      const savedDir = 'DOWNLOADS';
       const folderDisplay = `Accident_Reports/${folder.label}`;
 
       addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay, savedDir);
@@ -1392,9 +1393,11 @@
       btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
 
-      const locMsg = '📂 Downloads/Accident_Reports/' + folder.label;
+      const locMsg = multiPage
+        ? `📂 נשמרו ${items.length} קבצים — Downloads/Accident_Reports/${folder.label}`
+        : `📂 Downloads/Accident_Reports/${folder.label}`;
       showToast(locMsg);
-      startResetTimer(); // מאפס אחרי resetDelay שניות מהגדרות
+      startResetTimer();
     } catch(e) {
       btn.textContent = `❌ ${e.message}`;
       btn.style.background = '#c5221f';
@@ -1549,10 +1552,10 @@
           <input class="edit-field" id="driver_${ek}" value="${(merged.driver_name||'').replace(/"/g,'&quot;')}"
             placeholder="לא זוהה" oninput="updateGroupData('${safeKey}','driver_name',this.value)">
         </div>
-        ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים באותו קובץ</div>` : ''}
+        ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים</div>` : ''}
         <div class="pages-row">
           <button class="page-btn-all" onclick="saveGroup('${safeKey}', this)">
-            💾 שמור${multiPage ? ` (${items.length} עמודים בקובץ אחד)` : ''}<br>
+            💾 שמור${multiPage ? ` (${items.length} קבצים)` : ''}<br>
             <small style="font-size:10px;opacity:0.85">דוחות_תאונה/</small>
           </button>
         </div>`;
