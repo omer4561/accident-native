@@ -627,31 +627,10 @@
     content.innerHTML = html;
   }
 
-  // מציג רצף תמונות ב-imgViewer (עמוד אחד אחרי השני) אחרי שמירת PDF
-  function openPdfViewer(files, title) {
-    if (!files || !files.length) return;
-    let page = 0;
-    function showPage(f) {
-      const viewer = document.getElementById('imgViewer');
-      const img    = document.getElementById('imgViewerImg');
-      const titleEl = document.getElementById('imgViewerTitle');
-      titleEl.textContent = `${title} — עמוד ${page + 1}/${files.length}`;
-      const reader = new FileReader();
-      reader.onload = e => { img.src = e.target.result; };
-      reader.readAsDataURL(f);
-      viewer.style.display = 'flex';
-    }
-    showPage(files[page]);
-    // החלפת עמוד בטאץ'
-    const img = document.getElementById('imgViewerImg');
-    img.onclick = () => { page = (page + 1) % files.length; showPage(files[page]); };
-  }
-
-  function closePdfViewer() {} // legacy — לא בשימוש
-
   function closeImgViewer() {
     const img = document.getElementById('imgViewerImg');
     img.style.transform = '';
+    img.onclick = null;
     document.getElementById('imgViewer').style.display = 'none';
     img.src = '';
   }
@@ -1199,94 +1178,31 @@
     return `${plate}_${dateStr}${multiPage ? `_p${pageNum}` : ''}${ext}`;
   }
 
-  // ===================== MERGE PAGES =====================
-
-  // מנתח כותרת JPEG: מחזיר רוחב, גובה, מספר ערוצים
-  function _parseJpeg(bytes) {
-    let i = 2;
-    while (i < bytes.length - 1) {
-      if (bytes[i] !== 0xFF) break;
-      const m = bytes[i + 1];
-      if (m >= 0xC0 && m <= 0xC3) {
-        return { w: (bytes[i+7]<<8)|bytes[i+8], h: (bytes[i+5]<<8)|bytes[i+6], ch: bytes[i+9] };
-      }
-      if ((m >= 0xD0 && m <= 0xD9) || m === 0x01) { i += 2; continue; }
-      if (i + 3 >= bytes.length) break;
-      i += 2 + ((bytes[i+2]<<8)|bytes[i+3]);
-    }
-    return { w: 1240, h: 1754, ch: 3 };
-  }
-
-  // בונה PDF בינארי ללא ספריות — מטמיע JPEG גולמי עם DCTDecode
-  function _buildPdf(jpegs, dims) {
-    const n = jpegs.length;
-    const pid = i => 3 + i * 3;   // Page obj
-    const iid = i => 4 + i * 3;   // Image XObject
-    const cid = i => 5 + i * 3;   // Content stream
-    const parts = [], ofs = {};
-    let pos = 0;
-    const enc = new TextEncoder();
-    const s = t => { const b = enc.encode(t); parts.push(b); pos += b.length; };
-    const b = d => { parts.push(d); pos += d.length; };
-    const mark = id => { ofs[id] = pos; };
-
-    s('%PDF-1.4\n');
-
-    mark(1);
-    s('1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n');
-
-    mark(2);
-    s('2 0 obj\n<</Type/Pages/Kids[' +
-      Array.from({length: n}, (_, i) => `${pid(i)} 0 R`).join(' ') +
-      `]/Count ${n}>>\nendobj\n`);
-
-    for (let i = 0; i < n; i++) {
-      const { w, h, ch } = dims[i];
-      const cs = ch === 1 ? '/DeviceGray' : '/DeviceRGB';
-      const cm = enc.encode(`q ${w} 0 0 -${h} 0 ${h} cm /Im Do Q`);
-
-      mark(pid(i));
-      s(`${pid(i)} 0 obj\n<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${w} ${h}]` +
-        `/Resources<</XObject<</Im ${iid(i)} 0 R>>>>/Contents ${cid(i)} 0 R>>\nendobj\n`);
-
-      mark(iid(i));
-      s(`${iid(i)} 0 obj\n<</Type/XObject/Subtype/Image/Width ${w}/Height ${h}` +
-        `/ColorSpace ${cs}/BitsPerComponent 8/Filter/DCTDecode/Length ${jpegs[i].length}>>\nstream\n`);
-      b(jpegs[i]);
-      s('\nendstream\nendobj\n');
-
-      mark(cid(i));
-      s(`${cid(i)} 0 obj\n<</Length ${cm.length}>>\nstream\n`);
-      b(cm);
-      s('\nendstream\nendobj\n');
-    }
-
-    const xPos = pos;
-    const maxId = 2 + n * 3;
-    s(`xref\n0 ${maxId + 1}\n0000000000 65535 f \n`);
-    for (let id = 1; id <= maxId; id++) {
-      s(String(ofs[id] ?? 0).padStart(10, '0') + ' 00000 n \n');
-    }
-    s(`trailer\n<</Size ${maxId + 1}/Root 1 0 R>>\nstartxref\n${xPos}\n%%EOF\n`);
-
-    let total = 0; for (const p of parts) total += p.length;
-    const out = new Uint8Array(total);
-    let off = 0; for (const p of parts) { out.set(p, off); off += p.length; }
-    return out;
-  }
-
+  // ===================== MERGE PAGES (canvas — לשימוש ב-mergeHistoryReport בלבד) =====================
   async function mergePages(files) {
     if (files.length === 1) return files[0];
-
-    const jpegs = await Promise.all(files.map(f => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => resolve(new Uint8Array(e.target.result));
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(f);
+    const dataUrls = await Promise.all(files.map(f => new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(f);
     })));
-
-    const dims = jpegs.map(_parseJpeg);
-    return new File([_buildPdf(jpegs, dims)], 'merged.pdf', { type: 'application/pdf' });
+    const imgs = await Promise.all(dataUrls.map(src => new Promise((res, rej) => {
+      const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = src;
+    })));
+    const MAX_W = 1920;
+    const maxW = Math.min(Math.max(...imgs.map(im => im.naturalWidth)), MAX_W);
+    const totalH = imgs.reduce((s, im) => s + Math.round(im.naturalHeight * maxW / im.naturalWidth), 0);
+    const c = document.createElement('canvas');
+    c.width = maxW; c.height = totalH;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, maxW, totalH);
+    let y = 0;
+    for (const im of imgs) {
+      const h = Math.round(im.naturalHeight * maxW / im.naturalWidth);
+      ctx.drawImage(im, 0, y, maxW, h); y += h;
+    }
+    const b64 = c.toDataURL('image/jpeg', 0.92).split(',')[1];
+    const bin = atob(b64); const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new File([arr.buffer], 'merged.jpg', { type: 'image/jpeg' });
   }
 
   // ===================== FILE SAVE =====================
@@ -1401,21 +1317,18 @@
 
     try {
       const multiPage = items.length > 1;
-      const mergedFile = await mergePages(items.map(i => i.file));
-      const ext = multiPage ? '.pdf' : '.jpg';
-      const filename = buildFilename(merged, 1, false, ext);
-      const saveResult = await saveFile(mergedFile, filename, folder.path);
+      const savedPaths = [];
+      for (let i = 0; i < items.length; i++) {
+        const filename = buildFilename(merged, i + 1, multiPage, '.jpg');
+        const r = await saveFile(items[i].file, filename, folder.path);
+        savedPaths.push(r.path);
+      }
       const folderDisplay = `Accident_Reports/${folder.label}`;
-
-      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, [saveResult.path], folderDisplay, saveResult.dir || 'DOWNLOADS');
+      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay, 'DOWNLOADS');
 
       btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
       showToast(`📂 Downloads/Accident_Reports/${folder.label}`);
-
-      if (multiPage) {
-        openPdfViewer(items.map(i => i.file), filename);
-      }
       startResetTimer();
     } catch(e) {
       btn.textContent = `❌ ${e.message}`;
@@ -1574,7 +1487,7 @@
         ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים</div>` : ''}
         <div class="pages-row">
           <button class="page-btn-all" onclick="saveGroup('${safeKey}', this)">
-            💾 שמור${multiPage ? ` (${items.length} קבצים)` : ''}<br>
+            💾 שמור${multiPage ? ` (${items.length} עמודים)` : ''}<br>
             <small style="font-size:10px;opacity:0.85">דוחות_תאונה/</small>
           </button>
         </div>`;
