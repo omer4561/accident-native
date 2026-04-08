@@ -146,11 +146,23 @@ jobs:
           </network-security-config>
           EOF
 
-          # Add media permissions + network security config to AndroidManifest.xml
-          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n</manifest>|' \
+          # file_paths.xml — for FileProvider (APK install)
+          cat > android/app/src/main/res/xml/file_paths.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths>
+              <cache-path name="apk_cache" path="." />
+          </paths>
+          EOF
+
+          # Add permissions + FileProvider to AndroidManifest.xml
+          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <uses-permission android:name="android.permission.INTERNET" />\n</manifest>|' \
             android/app/src/main/AndroidManifest.xml
 
           sed -i 's/<application/<application android:requestLegacyExternalStorage="true" android:networkSecurityConfig="@xml\/network_security_config"/' \
+            android/app/src/main/AndroidManifest.xml
+
+          # הוסף FileProvider לפני </application>
+          sed -i 's|</application>|    <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml\/file_paths"\/><\/provider>\n    </application>|' \
             android/app/src/main/AndroidManifest.xml
 
       - name: Inject AndroidBridge into MainActivity
@@ -171,6 +183,7 @@ jobs:
           # הוסף imports
           imports = (
               'import android.content.ContentValues;\n'
+              'import android.content.Intent;\n'
               'import android.media.MediaScannerConnection;\n'
               'import android.net.Uri;\n'
               'import android.os.Build;\n'
@@ -180,6 +193,7 @@ jobs:
               'import android.webkit.JavascriptInterface;\n'
               'import java.io.File;\n'
               'import java.io.FileOutputStream;\n'
+              'import java.io.InputStream;\n'
               'import java.io.OutputStream;\n'
           )
           src = src.replace(
@@ -191,13 +205,12 @@ jobs:
           bridge_code = r"""
               getBridge().getWebView().addJavascriptInterface(new Object() {
 
-                  /** שמור קובץ ל-Downloads/Accident_Reports — עובד על כל גרסאות Android */
+                  /** שמור קובץ ל-Downloads/Accident_Reports */
                   @JavascriptInterface
                   public String saveFile(String base64Data, String filename, String subFolder) {
                       try {
                           byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
                           String relPath = "Accident_Reports" + (subFolder != null && !subFolder.isEmpty() ? "/" + subFolder : "");
-
                           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                               ContentValues cv = new ContentValues();
                               cv.put(MediaStore.Downloads.DISPLAY_NAME, filename);
@@ -205,26 +218,75 @@ jobs:
                               cv.put(MediaStore.Downloads.RELATIVE_PATH, "Download/" + relPath);
                               Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
                               if (uri == null) return "ERROR:MediaStore insert returned null";
-                              try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-                                  os.write(data);
-                              }
+                              try (OutputStream os = getContentResolver().openOutputStream(uri)) { os.write(data); }
                               return "OK:Download/" + relPath + "/" + filename;
                           } else {
                               File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), relPath);
                               dir.mkdirs();
                               File file = new File(dir, filename);
-                              try (FileOutputStream fos = new FileOutputStream(file)) {
-                                  fos.write(data);
-                              }
+                              try (FileOutputStream fos = new FileOutputStream(file)) { fos.write(data); }
                               MediaScannerConnection.scanFile(getApplicationContext(), new String[]{file.getAbsolutePath()}, null, null);
                               return "OK:" + file.getAbsolutePath();
                           }
-                      } catch (Exception e) {
-                          return "ERROR:" + e.getMessage();
-                      }
+                      } catch (Exception e) { return "ERROR:" + e.getMessage(); }
                   }
 
-                  /** סרוק קובץ קיים ל-MediaStore (גלריה) */
+                  /** הורד APK ופתח את מתקין המערכת */
+                  @JavascriptInterface
+                  public void downloadAndInstall(String apkUrl) {
+                      new Thread(() -> {
+                          try {
+                              File apkFile = new File(getCacheDir(), "update.apk");
+                              // הורדה עם מעקב אחר redirects
+                              java.net.URL url = new java.net.URL(apkUrl);
+                              java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                              conn.setInstanceFollowRedirects(true);
+                              conn.setConnectTimeout(15000);
+                              conn.setReadTimeout(60000);
+                              int total = conn.getContentLength();
+                              try (java.io.InputStream is = conn.getInputStream();
+                                   FileOutputStream fos = new FileOutputStream(apkFile)) {
+                                  byte[] buf = new byte[16384];
+                                  int n; long read = 0;
+                                  while ((n = is.read(buf)) != -1) {
+                                      fos.write(buf, 0, n);
+                                      read += n;
+                                      if (total > 0) {
+                                          final int pct = (int)(read * 100 / total);
+                                          runOnUiThread(() -> getBridge().getWebView()
+                                              .evaluateJavascript("window._apkProg(" + pct + ")", null));
+                                      }
+                                  }
+                              }
+                              // פתח מתקין מערכת
+                              runOnUiThread(() -> {
+                                  try {
+                                      Intent intent = new Intent(Intent.ACTION_VIEW);
+                                      Uri apkUri;
+                                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                          apkUri = androidx.core.content.FileProvider.getUriForFile(
+                                              getApplicationContext(),
+                                              getPackageName() + ".fileprovider", apkFile);
+                                          intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                      } else {
+                                          apkUri = Uri.fromFile(apkFile);
+                                      }
+                                      intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                                      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                      startActivity(intent);
+                                  } catch (Exception e2) {
+                                      getBridge().getWebView()
+                                          .evaluateJavascript("window._apkErr('" + e2.getMessage().replace("'","") + "')", null);
+                                  }
+                              });
+                          } catch (Exception e) {
+                              runOnUiThread(() -> getBridge().getWebView()
+                                  .evaluateJavascript("window._apkErr('" + e.getMessage().replace("'","") + "')", null));
+                          }
+                      }).start();
+                  }
+
+                  /** סרוק קובץ ל-MediaStore */
                   @JavascriptInterface
                   public void scanFile(String path) {
                       MediaScannerConnection.scanFile(getApplicationContext(), new String[]{path}, null, null);
@@ -281,7 +343,8 @@ jobs:
             https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/omer4561/accident-native.git /tmp/gh-pages
           cd /tmp/gh-pages
           TS=$(python3 -c "import json; print(json.load(open('version.json')).get('ts',0))" 2>/dev/null || echo 0)
-          echo "{\"ts\":$TS,\"apk\":${{ github.run_number }}}" > version.json
+          APK_URL="https://github.com/omer4561/accident-native/releases/download/v${{ github.run_number }}/app-release.apk"
+          echo "{\"ts\":$TS,\"apk\":${{ github.run_number }},\"apk_url\":\"$APK_URL\"}" > version.json
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
           git add version.json
