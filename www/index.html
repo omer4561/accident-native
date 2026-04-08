@@ -307,9 +307,9 @@
 
 <!-- Image viewer overlay -->
 <div id="imgViewer" style="display:none;position:fixed;inset:0;z-index:20000;background:#000;flex-direction:column">
-  <div style="display:flex;align-items:center;padding:12px 16px;background:rgba(0,0,0,0.7);flex-shrink:0">
-    <button onclick="closeImgViewer()" style="background:none;border:none;color:#fff;font-size:26px;cursor:pointer;padding:4px 12px 4px 0">‹</button>
-    <span id="imgViewerTitle" style="color:#fff;font-size:15px;flex:1;text-align:center"></span>
+  <div style="display:flex;align-items:center;padding:10px 16px;background:rgba(0,0,0,0.85);flex-shrink:0;direction:rtl">
+    <button onclick="closeImgViewer()" style="background:#1a73e8;border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;padding:8px 18px;border-radius:20px;white-space:nowrap">← חזרה</button>
+    <span id="imgViewerTitle" style="color:#fff;font-size:14px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 10px"></span>
   </div>
   <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center">
     <img id="imgViewerImg" src="" style="max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom">
@@ -670,15 +670,7 @@
         else if (res) throw new Error(res.slice(6));
       }
 
-      if (!base64 && window.Capacitor?.isNativePlatform?.()) {
-        const { Filesystem } = window.Capacitor.Plugins;
-        const dirs = r.dir ? [r.dir] : ['EXTERNAL_STORAGE', 'EXTERNAL', 'DATA'];
-        for (const dir of dirs) {
-          try { const d = await Filesystem.readFile({ path, directory: dir }); base64 = d.data; break; } catch(e) {}
-        }
-      }
-
-      if (!base64) throw new Error('לא נמצא הקובץ');
+      if (!base64) throw new Error('לא נמצא הקובץ — דרוש APK מעודכן');
       img.src = `data:image/jpeg;base64,${base64}`;
       // מחכה לטעינה ואז מסיר את ה-toast
       img.onload = () => { document.getElementById('saveToast').classList.remove('show'); };
