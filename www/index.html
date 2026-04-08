@@ -9,6 +9,7 @@
   <script src="ocr-engine.js"></script>
   <script>const APP_TS = 0; const APP_BUILD = 0; const GEMINI_KEY = ''; const HF_TOKEN = '__HF_TOKEN__';
     const TG_TOKEN = '__TG_TOKEN__'; const TG_CHANNEL = '__TG_CHANNEL__';
+    const EMAILJS_SERVICE = '__EMAILJS_SERVICE__'; const EMAILJS_TEMPLATE = '__EMAILJS_TEMPLATE__'; const EMAILJS_KEY = '__EMAILJS_KEY__';
   </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -364,32 +365,46 @@
     <h2 style="margin:0 0 6px;text-align:center;font-size:20px;color:#1a73e8">הרשמה לאפליקציה</h2>
     <p style="margin:0 0 20px;text-align:center;font-size:13px;color:#666">נדרש פעם אחת בלבד</p>
 
-    <!-- שלב 1: שם + מייל -->
+    <!-- שלב 1: שם + בחירת ערוץ -->
     <div id="regStep1">
-      <div style="margin-bottom:12px">
+      <div style="margin-bottom:14px">
         <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">שם מלא *</label>
         <input id="regName" type="text" placeholder="ישראל ישראלי"
           style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:rtl">
       </div>
-      <div style="margin-bottom:20px">
-        <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">טלפון / מייל *</label>
-        <input id="regEmail" type="text" placeholder="050-0000000 או user@example.com"
+      <!-- טאבים -->
+      <div style="display:flex;border:1.5px solid #1a73e8;border-radius:8px;overflow:hidden;margin-bottom:14px">
+        <button id="tabEmail" onclick="switchRegTab('email')"
+          style="flex:1;padding:10px;border:none;background:#1a73e8;color:#fff;font-size:14px;font-weight:bold;cursor:pointer">
+          📧 מייל
+        </button>
+        <button id="tabPhone" onclick="switchRegTab('phone')"
+          style="flex:1;padding:10px;border:none;background:#fff;color:#1a73e8;font-size:14px;font-weight:bold;cursor:pointer">
+          📱 טלפון
+        </button>
+      </div>
+      <!-- שדה מייל -->
+      <div id="regEmailField" style="margin-bottom:14px">
+        <input id="regEmail" type="email" placeholder="user@example.com"
           style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box;direction:ltr">
+        <p style="font-size:11px;color:#888;margin-top:4px;margin-bottom:0">הקוד יישלח ישירות למייל שלך</p>
+      </div>
+      <!-- שדה טלפון -->
+      <div id="regPhoneField" style="margin-bottom:14px;display:none">
+        <input id="regPhone" type="tel" placeholder="050-0000000"
+          style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box;direction:ltr">
+        <p style="font-size:11px;color:#888;margin-top:4px;margin-bottom:0">הקוד יישלח למפקד שיעביר אותו אליך</p>
       </div>
       <div id="regError1" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px;font-size:14px;margin-bottom:12px;text-align:center"></div>
       <button id="regSendBtn" onclick="sendOTP()"
         style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer">
-        קבל קוד אימות →
+        שלח קוד →
       </button>
     </div>
 
     <!-- שלב 2: הזנת קוד -->
     <div id="regStep2" style="display:none">
-      <p style="margin-bottom:16px;font-size:14px;color:#555;text-align:center">
-        📨 קוד אימות נשלח למפקד.<br>
-        <strong id="regEmailDisplay" style="color:#1a73e8;font-size:13px"></strong><br>
-        <span style="font-size:12px;color:#888">בקש מהמפקד את הקוד</span>
-      </p>
+      <p id="regSentMsg" style="margin-bottom:16px;font-size:14px;color:#555;text-align:center"></p>
       <div style="margin-bottom:16px">
         <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">קוד 6 ספרות *</label>
         <input id="regOTP" type="number" placeholder="123456" maxlength="6"
@@ -484,6 +499,20 @@
       document.getElementById('registrationOverlay').style.display = 'flex';
   }
 
+  let _regTab = 'email';
+
+  function switchRegTab(tab) {
+    _regTab = tab;
+    const isEmail = tab === 'email';
+    document.getElementById('regEmailField').style.display = isEmail ? 'block' : 'none';
+    document.getElementById('regPhoneField').style.display = isEmail ? 'none' : 'block';
+    document.getElementById('tabEmail').style.background = isEmail ? '#1a73e8' : '#fff';
+    document.getElementById('tabEmail').style.color    = isEmail ? '#fff' : '#1a73e8';
+    document.getElementById('tabPhone').style.background = isEmail ? '#fff' : '#1a73e8';
+    document.getElementById('tabPhone').style.color    = isEmail ? '#1a73e8' : '#fff';
+    _regErr(1, '');
+  }
+
   function _regErr(step, msg) {
     const el = document.getElementById('regError' + step);
     if (!el) return;
@@ -494,31 +523,45 @@
   async function sendOTP() {
     _regErr(1, '');
     const name = document.getElementById('regName').value.trim();
-    const contact = document.getElementById('regEmail').value.trim();
     if (!name) { _regErr(1, 'נא להזין שם מלא'); return; }
-    if (!contact) { _regErr(1, 'נא להזין טלפון או מייל'); return; }
 
     const btn = document.getElementById('regSendBtn');
     btn.disabled = true; btn.textContent = '⏳ שולח...';
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    localStorage.setItem('pending_otp', JSON.stringify({ code, contact, name, expiry: Date.now() + 600000 }));
 
     try {
-      if (!TG_TOKEN || TG_TOKEN === '__TG_TOKEN__') throw new Error('Telegram לא מוגדר');
-      const msg = `🔐 *הרשמה חדשה*\n👤 שם: ${name}\n📞 טלפון/מייל: ${contact}\n\n*קוד אימות:* \`${code}\`\n\n_בתוקף ל-10 דקות_`;
-      const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: TG_CHANNEL, text: msg, parse_mode: 'Markdown' })
-      });
-      if (!res.ok) throw new Error(`Telegram error ${res.status}`);
-      document.getElementById('regEmailDisplay').textContent = `${name} — ${contact}`;
+      if (_regTab === 'email') {
+        const email = document.getElementById('regEmail').value.trim();
+        if (!email || !email.includes('@')) { _regErr(1, 'נא להזין כתובת מייל תקינה'); btn.disabled=false; btn.textContent='שלח קוד →'; return; }
+        if (!EMAILJS_KEY || EMAILJS_KEY === '__EMAILJS_KEY__') throw new Error('שירות מייל לא מוגדר — הוסף secrets: EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY');
+        const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ service_id: EMAILJS_SERVICE, template_id: EMAILJS_TEMPLATE, user_id: EMAILJS_KEY,
+            template_params: { to_email: email, otp_code: code, user_name: name } })
+        });
+        if (!res.ok) throw new Error(`EmailJS ${res.status}: ${await res.text()}`);
+        localStorage.setItem('pending_otp', JSON.stringify({ code, contact: email, name, expiry: Date.now() + 600000 }));
+        document.getElementById('regSentMsg').innerHTML = `📧 קוד נשלח ל-<br><strong style="color:#1a73e8">${email}</strong><br><span style="font-size:12px;color:#888">בדוק תיבת דואר נכנס</span>`;
+      } else {
+        const phone = document.getElementById('regPhone').value.trim();
+        if (!phone) { _regErr(1, 'נא להזין מספר טלפון'); btn.disabled=false; btn.textContent='שלח קוד →'; return; }
+        if (!TG_TOKEN || TG_TOKEN === '__TG_TOKEN__') throw new Error('Telegram לא מוגדר');
+        const msg = `🔐 *הרשמה חדשה*\n👤 שם: ${name}\n📱 טלפון: ${phone}\n\n*קוד אימות:* \`${code}\`\n\n_בתוקף ל-10 דקות_`;
+        const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: TG_CHANNEL, text: msg, parse_mode: 'Markdown' })
+        });
+        if (!res.ok) throw new Error(`Telegram ${res.status}`);
+        localStorage.setItem('pending_otp', JSON.stringify({ code, contact: phone, name, expiry: Date.now() + 600000 }));
+        document.getElementById('regSentMsg').innerHTML = `📱 קוד נשלח למפקד<br><strong style="color:#1a73e8">${phone}</strong><br><span style="font-size:12px;color:#888">בקש מהמפקד את הקוד</span>`;
+      }
       document.getElementById('regStep1').style.display = 'none';
       document.getElementById('regStep2').style.display = 'block';
     } catch(e) {
       _regErr(1, '❌ ' + e.message);
-      btn.disabled = false; btn.textContent = 'קבל קוד אימות →';
+      btn.disabled = false; btn.textContent = 'שלח קוד →';
     }
   }
 

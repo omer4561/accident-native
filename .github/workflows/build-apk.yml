@@ -47,6 +47,11 @@ jobs:
           fi
           sed -i "s|__TG_TOKEN__|${{ secrets.TELEGRAM_TOKEN }}|g" www/index.html
           sed -i "s|__TG_CHANNEL__|${{ secrets.CHANNEL_ID }}|g" www/index.html
+          if [ -n "${{ secrets.EMAILJS_PUBLIC_KEY }}" ]; then
+            sed -i "s|__EMAILJS_SERVICE__|${{ secrets.EMAILJS_SERVICE_ID }}|g" www/index.html
+            sed -i "s|__EMAILJS_TEMPLATE__|${{ secrets.EMAILJS_TEMPLATE_ID }}|g" www/index.html
+            sed -i "s|__EMAILJS_KEY__|${{ secrets.EMAILJS_PUBLIC_KEY }}|g" www/index.html
+          fi
           echo "APP_BUILD=${{ github.run_number }}, APP_TS=${{ github.run_number }}"
 
       - name: Download Tesseract.js files (offline bundle)
