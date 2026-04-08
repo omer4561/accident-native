@@ -181,7 +181,7 @@
           ${meta.pages > 1 ? `&nbsp; <span class="badge">${meta.pages} עמודים</span>` : ''}
         </div>
         <div class="card-user">
-          👨‍💼 ${meta.userName || 'לא ידוע'} &nbsp;|&nbsp; 📧 ${meta.userEmail || '—'}
+          👨‍💼 ${meta.userName || 'לא ידוע'} &nbsp;|&nbsp; 📞 ${meta.userContact || '—'}
         </div>
         ${imgs ? `<div class="card-imgs">${imgs}</div>` : '<div style="color:#aaa;font-size:12px">אין תמונות</div>'}
       </div>`;
@@ -200,9 +200,9 @@
 
   function exportAdminCSV() {
     if (!allReports.length) { alert('אין נתונים לייצוא'); return; }
-    const rows = [['לוחית','תאריך','נהג','שם משתמש','מייל','תיקייה','נשמר ב','עמודים']];
+    const rows = [['לוחית','תאריך','נהג','שם משתמש','טלפון/מייל','תיקייה','נשמר ב','עמודים']];
     for (const r of allReports) {
-      rows.push([r.plate||'', r.date||'', r.driver||'', r.userName||'', r.userEmail||'', r.folder||'', r.savedAt||'', r.pages||1]);
+      rows.push([r.plate||'', r.date||'', r.driver||'', r.userName||'', r.userContact||'', r.folder||'', r.savedAt||'', r.pages||1]);
     }
     const csv = '\uFEFF' + rows.map(r =>
       r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')

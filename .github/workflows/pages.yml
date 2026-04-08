@@ -34,14 +34,8 @@ jobs:
             sed -i "s|__HF_TOKEN__|$HF|g" www/index.html
             sed -i "s|__HF_TOKEN__|$HF|g" www/admin.html
           fi
-          EJS_SVC="${{ secrets.EMAILJS_SERVICE_ID }}"
-          EJS_TPL="${{ secrets.EMAILJS_TEMPLATE_ID }}"
-          EJS_KEY="${{ secrets.EMAILJS_PUBLIC_KEY }}"
-          if [ -n "$EJS_KEY" ]; then
-            sed -i "s|__EMAILJS_SERVICE__|$EJS_SVC|g" www/index.html
-            sed -i "s|__EMAILJS_TEMPLATE__|$EJS_TPL|g" www/index.html
-            sed -i "s|__EMAILJS_KEY__|$EJS_KEY|g" www/index.html
-          fi
+          sed -i "s|__TG_TOKEN__|${{ secrets.TELEGRAM_TOKEN }}|g" www/index.html
+          sed -i "s|__TG_CHANNEL__|${{ secrets.CHANNEL_ID }}|g" www/index.html
           # שמור apk ו-apk_url מה-version.json הפרוס
           curl -sf "https://omer4561.github.io/accident-native/version.json" -o /tmp/v.json 2>/dev/null || echo '{}' > /tmp/v.json
           APK=$(python3 -c "import json; v=json.load(open('/tmp/v.json')); print(v.get('apk',0))" 2>/dev/null || echo 0)
