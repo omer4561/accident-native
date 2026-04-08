@@ -543,7 +543,7 @@
 
       // בדיקת עדכון APK — חוסם את האפליקציה אם גרסת APK ישנה מדי
       const currentBuild = typeof APP_BUILD !== 'undefined' ? APP_BUILD : 0;
-      if (apk && currentBuild && apk > currentBuild) {
+      if (apk && apk > currentBuild) {
         _showApkUpdateOverlay(currentBuild, apk, apk_url);
         return;
       }
