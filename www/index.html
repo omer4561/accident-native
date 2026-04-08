@@ -260,18 +260,6 @@
       <button onclick="closeSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#555">✕</button>
     </div>
     <div class="settings-row">
-      <label>🤖 מפתח Gemini AI (לזיהוי מדויק יותר)</label>
-      <input type="password" id="geminiKeyInput" class="gemini-input" placeholder="AIza...">
-      <div class="gemini-hint">
-        <b>איך מקבלים מפתח?</b><br>
-        1. כנס ל-<a href="https://aistudio.google.com/apikey" target="_blank" style="color:#1a73e8">aistudio.google.com/apikey</a><br>
-        2. לחץ "Create API key" → העתק<br>
-        3. הדבק כאן ולחץ שמור<br>
-        <span style="color:#1e8e3e">✅ חינמי — 15 בקשות/דקה</span> &nbsp;
-        <span style="color:#888">🔒 ללא מפתח: OCR מקומי</span>
-      </div>
-    </div>
-    <div class="settings-row">
       <label>זמן המתנה לאיפוס מסך</label>
       <input type="range" id="delaySlider" min="3" max="60" step="1" oninput="updateDelayLabel(this.value)">
       <div class="settings-val"><span id="delayLabel">10</span> שניות</div>
@@ -393,7 +381,6 @@
   function openSettings() {
     document.getElementById('delaySlider').value = resetDelay;
     document.getElementById('delayLabel').textContent = resetDelay;
-    document.getElementById('geminiKeyInput').value = geminiKey;
     document.getElementById('settingsOverlay').classList.add('open');
   }
   function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
@@ -402,12 +389,8 @@
   function saveSettings() {
     resetDelay = parseInt(document.getElementById('delaySlider').value, 10);
     localStorage.setItem('resetDelay', resetDelay);
-    const newKey = document.getElementById('geminiKeyInput').value.trim();
-    geminiKey = newKey;
-    if (newKey) localStorage.setItem('geminiKey', newKey);
-    else localStorage.removeItem('geminiKey');
     closeSettings();
-    showToast(newKey ? '✅ מפתח Gemini נשמר' : '✅ הגדרות נשמרו');
+    showToast('✅ הגדרות נשמרו');
   }
 
   function startResetTimer(delaySec) {
@@ -1497,14 +1480,6 @@
       const safeKey = key.replace(/'/g, "\\'");
       const ek = safeKey.replace(/[^a-z0-9]/gi,'_');
 
-      let pagesHtml = '';
-      items.forEach((item, idx) => {
-        pagesHtml += `<button class="page-btn" id="pagebtn_${ek}_${idx}"
-          onclick="saveSinglePage('${safeKey}',${idx},this)">
-          💾 עמוד ${idx+1}
-        </button>`;
-      });
-
       card.innerHTML = `
         <div class="edit-grid">
           <div>
@@ -1523,13 +1498,12 @@
           <input class="edit-field" id="driver_${ek}" value="${(merged.driver_name||'').replace(/"/g,'&quot;')}"
             placeholder="לא זוהה" oninput="updateGroupData('${safeKey}','driver_name',this.value)">
         </div>
-        ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים</div>` : ''}
+        ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים באותו קובץ</div>` : ''}
         <div class="pages-row">
           <button class="page-btn-all" onclick="saveGroup('${safeKey}', this)">
-            💾 שמור הכל${multiPage ? ` (${items.length} עמודים)` : ''}<br>
+            💾 שמור${multiPage ? ` (${items.length} עמודים בקובץ אחד)` : ''}<br>
             <small style="font-size:10px;opacity:0.85">דוחות_תאונה/</small>
           </button>
-          ${pagesHtml}
         </div>`;
       resultsList.appendChild(card);
     }
