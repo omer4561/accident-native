@@ -468,10 +468,12 @@
       if (!r.ok) return;
       const { ts } = await r.json();
       const stored = parseInt(localStorage.getItem('app_ts') || '0', 10);
-      if (ts && ts > Math.max(APP_TS || 0, stored)) {
+      if (ts && ts > stored) {
         localStorage.setItem('app_ts', String(ts));
-        _showUpdateOverlay();
-        setTimeout(() => location.reload(true), 1800);
+        if (stored > 0) { // לא בפתיחה הראשונה אי פעם
+          _showUpdateOverlay();
+          setTimeout(() => location.reload(true), 1800);
+        }
       }
     } catch(e) { /* אין רשת */ }
   })();
