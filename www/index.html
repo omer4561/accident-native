@@ -1180,7 +1180,18 @@
   async function mergePages(files) {
     if (files.length === 1) return files[0];
 
-    // המר כל קובץ ל-base64 data URL תחילה (עוקף CORS ב-WebView)
+    // טעינה עצלה של jsPDF — רק כשצריך מיזוג
+    if (!window.jspdf) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('נכשלה טעינת ספריית PDF'));
+        document.head.appendChild(s);
+      });
+    }
+
+    // המר כל קובץ ל-data URL
     const dataUrls = await Promise.all(files.map(file => new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = e => resolve(e.target.result);
@@ -1188,7 +1199,7 @@
       reader.readAsDataURL(file);
     })));
 
-    // טען תמונות מ-data URL (לא blob URL)
+    // טען תמונות
     const imgs = await Promise.all(dataUrls.map(src => new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
@@ -1196,28 +1207,23 @@
       img.src = src;
     })));
 
-    const MAX_W = 1920; // מגבלת canvas — מונע OOM על תמונות 12MP
-    const maxW = Math.min(Math.max(...imgs.map(im => im.naturalWidth)), MAX_W);
-    const totalH = imgs.reduce((s, im) => s + Math.round(im.naturalHeight * maxW / im.naturalWidth), 0);
-
-    const c = document.createElement('canvas');
-    c.width = maxW; c.height = totalH;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, maxW, totalH);
-    let y = 0;
-    for (const im of imgs) {
-      const h = Math.round(im.naturalHeight * maxW / im.naturalWidth);
-      ctx.drawImage(im, 0, y, maxW, h);
-      y += h;
+    // צור PDF — עמוד נפרד לכל תמונה
+    const { jsPDF } = window.jspdf;
+    let pdf = null;
+    for (let i = 0; i < imgs.length; i++) {
+      const w = imgs[i].naturalWidth  || 1920;
+      const h = imgs[i].naturalHeight || 2560;
+      const orientation = w >= h ? 'l' : 'p';
+      if (i === 0) {
+        pdf = new jsPDF({ orientation, unit: 'px', format: [w, h], compress: true });
+      } else {
+        pdf.addPage([w, h], orientation);
+      }
+      pdf.addImage(dataUrls[i], 'JPEG', 0, 0, w, h);
     }
 
-    const dataUrl = c.toDataURL('image/jpeg', 0.92);
-    const base64 = dataUrl.split(',')[1];
-    const binary = atob(base64);
-    const arr = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-    return new File([arr.buffer], 'merged.jpg', { type: 'image/jpeg' });
+    const pdfBytes = pdf.output('arraybuffer');
+    return new File([pdfBytes], 'merged.pdf', { type: 'application/pdf' });
   }
 
   // ===================== FILE SAVE =====================
@@ -1332,7 +1338,8 @@
 
     try {
       const mergedFile = await mergePages(items.map(i => i.file));
-      const filename = buildFilename(merged, 1, false, '.jpg');
+      const ext = items.length > 1 ? '.pdf' : '.jpg';
+      const filename = buildFilename(merged, 1, false, ext);
       const saveResult = await saveFile(mergedFile, filename, folder.path);
 
       const savedPaths = [saveResult.path];
