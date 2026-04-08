@@ -814,6 +814,16 @@
     if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
   })();
 
+  // ===================== PHOTO → FILE =====================
+  // fetch(webPath) נכשל כשהדף נטען מ-GitHub Pages (cross-origin לcapacitor://)
+  // Filesystem.readFile עם הנתיב המוחלט (photo.path) עובד תמיד
+  async function capacitorPhotoToFile(absPath, name) {
+    const { Filesystem } = window.Capacitor.Plugins;
+    const { data } = await Filesystem.readFile({ path: absPath });
+    const blob = await fetch(`data:image/jpeg;base64,${data}`).then(r => r.blob());
+    return new File([blob], name, { type: 'image/jpeg' });
+  }
+
   // ===================== GALLERY PICK =====================
   async function pickFromGallery() {
     if (!window.Capacitor?.isNativePlatform?.()) {
@@ -824,9 +834,8 @@
       const { Camera } = window.Capacitor.Plugins;
       const result = await Camera.pickImages({ quality: 85, width: 1920 });
       for (const photo of result.photos) {
-        const response = await fetch(photo.webPath);
-        const blob = await response.blob();
-        const file = new File([blob], `gallery_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`, { type: 'image/jpeg' });
+        const name = `gallery_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+        const file = await capacitorPhotoToFile(photo.path, name);
         selectedFiles.push(file);
       }
       updateUploadUI();
@@ -851,9 +860,7 @@
         width: 1920,
         correctOrientation: true
       });
-      const response = await fetch(image.webPath);
-      const blob = await response.blob();
-      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const file = await capacitorPhotoToFile(image.path, `photo_${Date.now()}.jpg`);
       selectedFiles.push(file);
       updateUploadUI();
     } catch(e) {
