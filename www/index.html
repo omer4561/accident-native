@@ -640,12 +640,76 @@
     content.innerHTML = html;
   }
 
-  const _vp = document.querySelector('meta[name=viewport]');
   function closeImgViewer() {
-    _vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+    const img = document.getElementById('imgViewerImg');
+    img.style.transform = '';
     document.getElementById('imgViewer').style.display = 'none';
-    document.getElementById('imgViewerImg').src = '';
+    img.src = '';
   }
+
+  // ---- Pinch-zoom על התמונה ----
+  (function() {
+    let scale = 1, startDist = 0, startScale = 1;
+    let tx = 0, ty = 0, startTx = 0, startTy = 0, panStart = null;
+
+    function dist(t) {
+      const dx = t[0].clientX - t[1].clientX;
+      const dy = t[0].clientY - t[1].clientY;
+      return Math.sqrt(dx*dx + dy*dy);
+    }
+    function applyTransform(img) {
+      img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+    }
+    function resetZoom(img) {
+      scale = 1; tx = 0; ty = 0;
+      img.style.transform = '';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const img = document.getElementById('imgViewerImg');
+      img.style.transformOrigin = 'center center';
+      img.style.transition = 'none';
+      img.style.willChange = 'transform';
+
+      img.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+          startDist = dist(e.touches);
+          startScale = scale;
+          e.preventDefault();
+        } else if (e.touches.length === 1 && scale > 1) {
+          panStart = { x: e.touches[0].clientX - tx, y: e.touches[0].clientY - ty };
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      img.addEventListener('touchmove', e => {
+        if (e.touches.length === 2) {
+          const d = dist(e.touches);
+          scale = Math.min(8, Math.max(1, startScale * d / startDist));
+          applyTransform(img);
+          e.preventDefault();
+        } else if (e.touches.length === 1 && panStart && scale > 1) {
+          tx = e.touches[0].clientX - panStart.x;
+          ty = e.touches[0].clientY - panStart.y;
+          applyTransform(img);
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      img.addEventListener('touchend', e => {
+        if (e.touches.length < 2) panStart = null;
+        if (scale < 1.05) resetZoom(img);
+      });
+
+      // double-tap לאיפוס zoom
+      let lastTap = 0;
+      img.addEventListener('touchend', e => {
+        const now = Date.now();
+        if (now - lastTap < 300) resetZoom(img);
+        lastTap = now;
+      });
+    });
+  })();
 
   async function openFile(id, idx) {
     const r = history.find(x => x.id === id);
@@ -660,7 +724,6 @@
     title.textContent = fname;
     img.src = '';
     viewer.style.display = 'flex';
-    _vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
     showToast('⏳ טוען תמונה…', 10000);
 
     try {
