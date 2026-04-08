@@ -365,9 +365,6 @@
   (async function liveBoot() {
     const PAGES = 'https://omer4561.github.io/accident-native/';
     if (!location.href.startsWith('capacitor://')) return; // already on Pages
-    // שמור את ה-build של ה-APK המותקן לפני המעבר ל-Pages
-    const myBuild = typeof APP_BUILD !== 'undefined' ? APP_BUILD : 0;
-    if (myBuild) localStorage.setItem('installed_build', String(myBuild));
     try {
       const r = await fetch(PAGES + 'version.json?t=' + Date.now(),
         { cache: 'no-store', signal: AbortSignal.timeout(4000) });
@@ -536,8 +533,8 @@
       if (!r.ok) return;
       const { ts, apk, apk_url } = await r.json();
 
-      // currentBuild: מה שנשמר ב-liveBoot מה-APK המותקן
-      const currentBuild = parseInt(localStorage.getItem('installed_build') || '0', 10);
+      // currentBuild: מה-AndroidBridge ישירות מה-Java (לא תלוי ב-origin)
+      const currentBuild = window.AndroidBridge ? window.AndroidBridge.getInstalledBuild() : 0;
       if (apk && apk > currentBuild) {
         _showApkUpdateOverlay(currentBuild, apk, apk_url);
         return;

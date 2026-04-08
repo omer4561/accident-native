@@ -286,6 +286,12 @@ jobs:
                       }).start();
                   }
 
+                  /** מחזיר את מספר ה-build של ה-APK המותקן — קבוע שמוזרק בזמן בנייה */
+                  @JavascriptInterface
+                  public int getInstalledBuild() {
+                      return __APK_BUILD__;
+                  }
+
                   /** סרוק קובץ ל-MediaStore */
                   @JavascriptInterface
                   public void scanFile(String path) {
@@ -303,6 +309,10 @@ jobs:
           open(path, 'w').write(src)
           print("AndroidBridge injected into", path)
           PYEOF
+          # הזרק את מספר ה-build לתוך getInstalledBuild()
+          MAIN=$(find android -name "MainActivity.java" | head -1)
+          sed -i "s/__APK_BUILD__/${{ github.run_number }}/" "$MAIN"
+          echo "Injected build number ${{ github.run_number }}"
 
       - name: Build Release APK
         run: |
