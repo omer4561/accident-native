@@ -1119,16 +1119,41 @@
 
   async function saveFile(file, filename, folder) {
     if (window.Capacitor?.isNativePlatform?.()) {
-      if (!window.AndroidBridge) throw new Error('AndroidBridge לא זמין — דרוש APK מעודכן');
-
       const base64 = await fileToBase64(file);
-      // saveFile רץ ב-Java thread ומחזיר string "OK:path" או "ERROR:msg"
-      const result = window.AndroidBridge.saveFile(base64, filename, folder || '');
-      if (!result || result.startsWith('ERROR:')) {
-        throw new Error(result ? result.slice(6) : 'אין תגובה מ-AndroidBridge');
+
+      // AndroidBridge — MediaStore API, שומר ל-Downloads/ (APK חדש)
+      if (window.AndroidBridge) {
+        const result = window.AndroidBridge.saveFile(base64, filename, folder || '');
+        if (!result || result.startsWith('ERROR:')) {
+          throw new Error(result ? result.slice(6) : 'אין תגובה מ-AndroidBridge');
+        }
+        return { path: result.slice(3), dir: 'DOWNLOADS' };
       }
-      const savedPath = result.slice(3); // חיתוך "OK:"
-      return { path: savedPath, dir: 'DOWNLOADS' };
+
+      // Fallback — Capacitor Filesystem (APK ישן)
+      const { Filesystem } = window.Capacitor.Plugins;
+      const subPath = folder ? `Accident_Reports/${folder}/${filename}` : `Accident_Reports/${filename}`;
+      const dirPath  = folder ? `Accident_Reports/${folder}` : 'Accident_Reports';
+      const TRIES = [
+        { path: subPath, directory: 'EXTERNAL_STORAGE' },
+        { path: subPath, directory: 'EXTERNAL' },
+        { path: subPath, directory: 'DATA' },
+      ];
+      let lastErr = '';
+      for (const t of TRIES) {
+        try {
+          await Filesystem.mkdir({ path: dirPath, directory: t.directory, recursive: true }).catch(() => {});
+          await Filesystem.writeFile({ path: t.path, data: base64, directory: t.directory, recursive: true });
+          try {
+            const { uri } = await Filesystem.getUri({ path: t.path, directory: t.directory });
+            if (window.AndroidMediaScanner) window.AndroidMediaScanner.scanFile(uri.replace('file://', ''));
+          } catch(e) { /* silent */ }
+          return { path: t.path, dir: t.directory };
+        } catch(e) {
+          lastErr = `[${t.directory}] ${e.message}`;
+        }
+      }
+      throw new Error('שגיאת שמירה: ' + lastErr);
     }
 
     // Browser / web fallback — trigger download
