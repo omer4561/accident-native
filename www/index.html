@@ -640,7 +640,9 @@
     content.innerHTML = html;
   }
 
+  const _vp = document.querySelector('meta[name=viewport]');
   function closeImgViewer() {
+    _vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
     document.getElementById('imgViewer').style.display = 'none';
     document.getElementById('imgViewerImg').src = '';
   }
@@ -658,6 +660,7 @@
     title.textContent = fname;
     img.src = '';
     viewer.style.display = 'flex';
+    _vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
     showToast('⏳ טוען תמונה…', 10000);
 
     try {
