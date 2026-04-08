@@ -294,13 +294,7 @@
 <div id="saveToast"></div>
 
 <!-- Image viewer overlay -->
-<div id="pdfViewer" style="display:none;position:fixed;inset:0;z-index:20001;background:#000;flex-direction:column">
-  <div style="display:flex;align-items:center;padding:10px 16px;background:rgba(0,0,0,0.85);flex-shrink:0;direction:rtl">
-    <button onclick="closePdfViewer()" style="background:#1a73e8;border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;padding:8px 18px;border-radius:20px;white-space:nowrap">← חזרה</button>
-    <span id="pdfViewerTitle" style="color:#fff;font-size:14px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 10px"></span>
-  </div>
-  <iframe id="pdfViewerFrame" src="about:blank" style="width:100%;flex:1;border:none;background:#525659"></iframe>
-</div>
+
 <div id="imgViewer" style="display:none;position:fixed;inset:0;z-index:20000;background:#000;flex-direction:column">
   <div style="display:flex;align-items:center;padding:10px 16px;background:rgba(0,0,0,0.85);flex-shrink:0;direction:rtl">
     <button onclick="closeImgViewer()" style="background:#1a73e8;border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;padding:8px 18px;border-radius:20px;white-space:nowrap">← חזרה</button>
@@ -633,16 +627,27 @@
     content.innerHTML = html;
   }
 
-  function openPdfViewer(dataUrl, title) {
-    document.getElementById('pdfViewerTitle').textContent = title || 'PDF';
-    document.getElementById('pdfViewerFrame').src = dataUrl;
-    document.getElementById('pdfViewer').style.display = 'flex';
+  // מציג רצף תמונות ב-imgViewer (עמוד אחד אחרי השני) אחרי שמירת PDF
+  function openPdfViewer(files, title) {
+    if (!files || !files.length) return;
+    let page = 0;
+    function showPage(f) {
+      const viewer = document.getElementById('imgViewer');
+      const img    = document.getElementById('imgViewerImg');
+      const titleEl = document.getElementById('imgViewerTitle');
+      titleEl.textContent = `${title} — עמוד ${page + 1}/${files.length}`;
+      const reader = new FileReader();
+      reader.onload = e => { img.src = e.target.result; };
+      reader.readAsDataURL(f);
+      viewer.style.display = 'flex';
+    }
+    showPage(files[page]);
+    // החלפת עמוד בטאץ'
+    const img = document.getElementById('imgViewerImg');
+    img.onclick = () => { page = (page + 1) % files.length; showPage(files[page]); };
   }
 
-  function closePdfViewer() {
-    document.getElementById('pdfViewer').style.display = 'none';
-    document.getElementById('pdfViewerFrame').src = 'about:blank';
-  }
+  function closePdfViewer() {} // legacy — לא בשימוש
 
   function closeImgViewer() {
     const img = document.getElementById('imgViewerImg');
@@ -1409,8 +1414,7 @@
       showToast(`📂 Downloads/Accident_Reports/${folder.label}`);
 
       if (multiPage) {
-        const base64 = await fileToBase64(mergedFile);
-        openPdfViewer('data:application/pdf;base64,' + base64, filename);
+        openPdfViewer(items.map(i => i.file), filename);
       }
       startResetTimer();
     } catch(e) {
