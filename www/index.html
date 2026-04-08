@@ -1281,7 +1281,8 @@
       const base64 = await fileToBase64(file);
 
       // AndroidBridge — MediaStore API, שומר ל-Downloads/ (APK חדש)
-      if (window.AndroidBridge) {
+      // PDF מדלג על AndroidBridge כי הוא מקודד קשה image/jpeg
+      if (window.AndroidBridge && !filename.endsWith('.pdf')) {
         const result = window.AndroidBridge.saveFile(base64, filename, folder || '');
         if (!result || result.startsWith('ERROR:')) {
           throw new Error(result ? result.slice(6) : 'אין תגובה מ-AndroidBridge');
