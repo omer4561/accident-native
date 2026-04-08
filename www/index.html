@@ -453,7 +453,10 @@
   }
 
   (async function checkUpdate() {
-    if (location.href.startsWith('capacitor://')) return;
+    if (location.href.startsWith('capacitor://')) {
+      location.href = 'https://omer4561.github.io/accident-native';
+      return;
+    }
     try {
       const r = await fetch(
         'https://omer4561.github.io/accident-native/version.json?t=' + Date.now(),
