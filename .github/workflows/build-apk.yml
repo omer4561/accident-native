@@ -293,51 +293,44 @@ jobs:
                       return __APK_BUILD__;
                   }
 
-                  /** פתח קובץ בגלריה/viewer המובנה של Android */
+                  /** קרא קובץ מ-Downloads והחזר base64 — לתצוגה ב-viewer הפנימי */
                   @JavascriptInterface
-                  public String openFile(String filePath) {
+                  public String readFile(String filePath) {
                       try {
-                          // בנה URI לפי הנתיב השמור (Download/Accident_Reports/...)
-                          // נסה MediaStore קודם — מחזיר URI שניתן לשתף
-                          android.database.Cursor cursor = null;
-                          Uri fileUri = null;
-
+                          // נסה קודם MediaStore (Android 10+)
                           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                              String[] proj = { MediaStore.Downloads._ID };
-                              String sel = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND " +
-                                           MediaStore.Downloads.DISPLAY_NAME + "=?";
                               String fname = new File(filePath).getName();
-                              String relDir = filePath.contains("/") ?
-                                  filePath.substring(0, filePath.lastIndexOf('/') + 1) : "";
-                              cursor = getContentResolver().query(
-                                  MediaStore.Downloads.EXTERNAL_CONTENT_URI, proj,
-                                  sel, new String[]{ "%" + relDir + "%", fname }, null);
+                              Cursor cursor = getContentResolver().query(
+                                  MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                                  new String[]{ MediaStore.Downloads._ID },
+                                  MediaStore.Downloads.DISPLAY_NAME + "=?",
+                                  new String[]{ fname }, null);
                               if (cursor != null && cursor.moveToFirst()) {
-                                  long id = cursor.getLong(0);
-                                  fileUri = Uri.withAppendedPath(
-                                      MediaStore.Downloads.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                                  long mid = cursor.getLong(0);
+                                  cursor.close();
+                                  Uri uri = Uri.withAppendedPath(
+                                      MediaStore.Downloads.EXTERNAL_CONTENT_URI, String.valueOf(mid));
+                                  try (java.io.InputStream is = getContentResolver().openInputStream(uri);
+                                       java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream()) {
+                                      byte[] buf = new byte[8192]; int n;
+                                      while ((n = is.read(buf)) != -1) bos.write(buf, 0, n);
+                                      return Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
+                                  }
                               }
                               if (cursor != null) cursor.close();
                           }
-
-                          if (fileUri == null) {
-                              // fallback: נתיב ישיר
-                              File f = new File(
-                                  Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                                  filePath.replaceFirst("^Download/", ""));
-                              if (!f.exists()) return "ERROR:קובץ לא נמצא: " + f.getAbsolutePath();
-                              fileUri = androidx.core.content.FileProvider.getUriForFile(
-                                  getApplicationContext(), getPackageName() + ".fileprovider", f);
+                          // fallback: נתיב ישיר
+                          File f = new File(
+                              Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                              filePath.replaceFirst("^Download/", ""));
+                          if (!f.exists()) return "ERROR:קובץ לא נמצא";
+                          try (java.io.FileInputStream fis = new java.io.FileInputStream(f);
+                               java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream()) {
+                              byte[] buf = new byte[8192]; int n;
+                              while ((n = fis.read(buf)) != -1) bos.write(buf, 0, n);
+                              return Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
                           }
-
-                          Intent intent = new Intent(Intent.ACTION_VIEW);
-                          intent.setDataAndType(fileUri, "image/jpeg");
-                          intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-                          startActivity(intent);
-                          return "OK";
-                      } catch (Exception e) {
-                          return "ERROR:" + e.getMessage();
-                      }
+                      } catch (Exception e) { return "ERROR:" + e.getMessage(); }
                   }
 
                   /** סרוק קובץ ל-MediaStore */
