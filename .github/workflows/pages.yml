@@ -22,12 +22,21 @@ jobs:
           if [ -n "$GKEY" ]; then
             sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
           fi
-          # שמור את apk מה-version.json הפרוס הקיים (מעודכן רק ע"י build-apk.yml)
-          APK_VER=0
-          curl -sf "https://omer4561.github.io/accident-native/version.json" -o /tmp/v.json 2>/dev/null \
-            && APK_VER=$(python3 -c "import json; print(json.load(open('/tmp/v.json')).get('apk',0))" 2>/dev/null || echo 0) \
-            || true
-          echo "{\"ts\":$TS,\"apk\":$APK_VER}" > www/version.json
+          # שמור apk ו-apk_url מה-version.json הפרוס (מעודכן רק ע"י build-apk.yml)
+          curl -sf "https://omer4561.github.io/accident-native/version.json" -o /tmp/v.json 2>/dev/null || echo '{}' > /tmp/v.json
+          python3 -c "
+import json, sys
+try:
+    v = json.load(open('/tmp/v.json'))
+except: v = {}
+apk = v.get('apk', 0)
+apk_url = v.get('apk_url', '')
+ts = int(open('/tmp/ts').read().strip()) if True else 0
+import os; ts = int('$TS')
+out = {'ts': ts, 'apk': apk}
+if apk_url: out['apk_url'] = apk_url
+print(json.dumps(out))
+" > www/version.json
 
       - name: Deploy www/ to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
