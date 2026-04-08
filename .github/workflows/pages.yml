@@ -14,13 +14,25 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Inject build timestamp and Gemini key
+      - name: Create HuggingFace Dataset (if not exists)
+        run: |
+          curl -s -X POST "https://huggingface.co/api/repos/create" \
+            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"type":"dataset","name":"accident-reports","private":true}' || true
+
+      - name: Inject build timestamp and secrets
         run: |
           TS=$(date -u +%s)
           sed -i "s/const APP_TS = [0-9]*/const APP_TS = $TS/" www/index.html
           GKEY="${{ secrets.GEMINI_KEY }}"
           if [ -n "$GKEY" ]; then
             sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
+          fi
+          HF="${{ secrets.HF_TOKEN }}"
+          if [ -n "$HF" ]; then
+            sed -i "s|__HF_TOKEN__|$HF|g" www/index.html
+            sed -i "s|__HF_TOKEN__|$HF|g" www/admin.html
           fi
           # שמור apk ו-apk_url מה-version.json הפרוס
           curl -sf "https://omer4561.github.io/accident-native/version.json" -o /tmp/v.json 2>/dev/null || echo '{}' > /tmp/v.json

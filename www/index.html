@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
   <script src="ocr-engine.js"></script>
-  <script>const APP_TS = 0; const APP_BUILD = 0; const GEMINI_KEY = '';</script>
+  <script>const APP_TS = 0; const APP_BUILD = 0; const GEMINI_KEY = ''; const HF_TOKEN = '__HF_TOKEN__';</script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; direction: rtl; }
@@ -259,6 +259,12 @@
       ⚙️ הגדרות
       <button onclick="closeSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#555">✕</button>
     </div>
+    <div id="profileSection" style="margin-bottom:16px;padding:12px;background:#e8f0fe;border-radius:10px;">
+      <div style="font-size:12px;color:#666;margin-bottom:4px">👤 המשתמש שלך</div>
+      <div id="profileName" style="font-weight:bold;font-size:15px;color:#1a73e8"></div>
+      <div id="profileId" style="font-size:13px;color:#555;margin-top:2px"></div>
+      <button onclick="editProfile()" style="margin-top:8px;font-size:12px;padding:5px 12px;background:transparent;border:1.5px solid #1a73e8;color:#1a73e8;border-radius:6px;cursor:pointer">ערוך פרטים</button>
+    </div>
     <div class="settings-row">
       <label>זמן המתנה לאיפוס מסך</label>
       <input type="range" id="delaySlider" min="3" max="60" step="1" oninput="updateDelayLabel(this.value)">
@@ -349,6 +355,29 @@
   </div>
 </div>
 
+<!-- הרשמה — חוסמת את האפליקציה בפתיחה ראשונה -->
+<div id="registrationOverlay" style="display:none;position:fixed;inset:0;background:#1a73e8;z-index:10000;flex-direction:column;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;width:min(92vw,380px);box-shadow:0 8px 32px rgba(0,0,0,0.25)">
+    <div style="text-align:center;font-size:40px;margin-bottom:8px">🪪</div>
+    <h2 style="margin:0 0 6px;text-align:center;font-size:20px;color:#1a73e8">הרשמה לאפליקציה</h2>
+    <p style="margin:0 0 20px;text-align:center;font-size:13px;color:#666">נדרש פעם אחת בלבד</p>
+    <div style="margin-bottom:12px">
+      <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">שם מלא *</label>
+      <input id="regName" type="text" placeholder="ישראל ישראלי"
+        style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:rtl">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">מספר אישי *</label>
+      <input id="regId" type="text" placeholder="1234567"
+        style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:ltr;text-align:right">
+    </div>
+    <button onclick="submitRegistration()"
+      style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer">
+      שמור והמשך ←
+    </button>
+  </div>
+</div>
+
 <script>
   // ===================== LIVE BOOT — redirect APK to GitHub Pages =====================
   (async function liveBoot() {
@@ -379,9 +408,110 @@
   // localStorage מאפשר עקיפה ידנית (web / debug)
   let geminiKey = localStorage.getItem('geminiKey') || (typeof GEMINI_KEY !== 'undefined' ? GEMINI_KEY : '') || '';
 
+  // ===================== HF + USER =====================
+  const HF_OWNER = 'omer4561';
+  const HF_REPO  = 'accident-reports';
+  const HF_API   = `https://huggingface.co/api/datasets/${HF_OWNER}/${HF_REPO}`;
+  const HF_FILES = `https://huggingface.co/datasets/${HF_OWNER}/${HF_REPO}/resolve/main`;
+
+  let userId = localStorage.getItem('device_id');
+  if (!userId) { userId = crypto.randomUUID(); localStorage.setItem('device_id', userId); }
+
+  async function hfCommit(filePath, content, isBinary = false) {
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') return;
+    await fetch(`${HF_API}/commit/main`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/x-ndjson' },
+      body: [
+        JSON.stringify({ summary: `report: ${filePath}` }),
+        JSON.stringify({ key: filePath, type: 'addOrUpdate', content: isBinary ? content : btoa(unescape(encodeURIComponent(content))), encoding: 'base64' })
+      ].join('\n')
+    });
+  }
+
+  async function compressForUpload(file, maxPx = 1200, quality = 0.75) {
+    return new Promise(resolve => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(b => resolve(b), 'image/jpeg', quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  function showRegistrationIfNeeded() {
+    const p = JSON.parse(localStorage.getItem('user_profile') || 'null');
+    if (!p || !p.name || !p.personalId)
+      document.getElementById('registrationOverlay').style.display = 'flex';
+  }
+
+  async function submitRegistration() {
+    const name = document.getElementById('regName').value.trim();
+    const personalId = document.getElementById('regId').value.trim();
+    if (!name || !personalId) { showToast('נא למלא את כל השדות'); return; }
+    const profile = { name, personalId, registeredAt: Date.now(), userId };
+    localStorage.setItem('user_profile', JSON.stringify(profile));
+    document.getElementById('registrationOverlay').style.display = 'none';
+    hfCommit(`users/${userId}.json`, JSON.stringify(profile)).catch(() => {});
+  }
+
+  function editProfile() {
+    const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    document.getElementById('regName').value = p.name || '';
+    document.getElementById('regId').value = p.personalId || '';
+    closeSettings();
+    document.getElementById('registrationOverlay').style.display = 'flex';
+  }
+
+  async function _uploadGroupToHF(key, localPaths, data, folder) {
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') return;
+    const items = window.groupsData[key];
+    if (!items) return;
+    const profile = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    const reportId = `${userId}_${Date.now()}`;
+    const hfUrls = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const compressed = await compressForUpload(items[i].file, 1200, 0.75);
+      const b64 = await new Promise(res => {
+        const reader = new FileReader();
+        reader.onload = e => res(e.target.result.split(',')[1]);
+        reader.readAsDataURL(compressed);
+      });
+      const path = `data/${userId}/${reportId}_p${i+1}.jpg`;
+      await hfCommit(path, b64, true);
+      hfUrls.push(`${HF_FILES}/${path}?token=${HF_TOKEN}`);
+    }
+
+    await hfCommit(`data/${userId}/${reportId}.json`, JSON.stringify({
+      reportId, userId,
+      userName: profile.name || '',
+      personalId: profile.personalId || '',
+      plate: data.license_plate || '',
+      date: data.date || '',
+      driver: data.driver_name || '',
+      folder, pages: hfUrls.length, urls: hfUrls,
+      savedAt: new Date().toISOString()
+    }));
+
+    const rec = history.find(x => x.files && x.files[0] === localPaths[0]);
+    if (rec) { rec.hfUrls = hfUrls; saveHistory(); }
+  }
+
+  // ===================== SETTINGS =====================
   function openSettings() {
     document.getElementById('delaySlider').value = resetDelay;
     document.getElementById('delayLabel').textContent = resetDelay;
+    const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    document.getElementById('profileName').textContent = p.name || 'לא רשום';
+    document.getElementById('profileId').textContent = p.personalId ? `מ.א. ${p.personalId}` : '';
     document.getElementById('settingsOverlay').classList.add('open');
   }
   function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
@@ -702,23 +832,28 @@
   async function openFile(id, idx) {
     const r = history.find(x => x.id === id);
     if (!r || !r.files || !r.files[idx]) return;
-    const path = r.files[idx];
-    const fname = path.split('/').pop();
 
     const viewer = document.getElementById('imgViewer');
     const img    = document.getElementById('imgViewerImg');
     const title  = document.getElementById('imgViewerTitle');
 
-    title.textContent = fname;
+    title.textContent = r.files[idx].split('/').pop();
     img.src = '';
     viewer.style.display = 'flex';
-    showToast('⏳ טוען תמונה…', 10000);
 
+    // HF URL — ישיר, ללא קריאת קובץ מקומי
+    if (r.hfUrls && r.hfUrls[idx]) {
+      img.src = r.hfUrls[idx];
+      return;
+    }
+
+    // fallback: קרא מ-Downloads דרך AndroidBridge
+    showToast('⏳ טוען תמונה…', 10000);
+    const path = r.files[idx];
     try {
       let base64 = null;
 
       if (window.AndroidBridge) {
-        // קרא ישירות מהנתיב המוחלט
         const res = window.AndroidBridge.readFile(path);
         if (res && !res.startsWith('ERROR:')) base64 = res;
         else if (res) throw new Error(res.slice(6));
@@ -734,7 +869,6 @@
 
       if (!base64) throw new Error('לא נמצא הקובץ');
       img.src = `data:image/jpeg;base64,${base64}`;
-      // מחכה לטעינה ואז מסיר את ה-toast
       img.onload = () => { document.getElementById('saveToast').classList.remove('show'); };
     } catch(e) {
       closeImgViewer();
@@ -1325,6 +1459,8 @@
       }
       const folderDisplay = `Accident_Reports/${folder.label}`;
       addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay, 'DOWNLOADS');
+      // העלאה ל-HuggingFace ברקע — לא חוסמת UI
+      _uploadGroupToHF(key, savedPaths, merged, folderDisplay).catch(() => {});
 
       btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
@@ -1503,6 +1639,9 @@
 
     section.scrollIntoView({ behavior: 'smooth' });
   }
+
+  // ===================== REGISTRATION CHECK ON LOAD =====================
+  document.addEventListener('DOMContentLoaded', showRegistrationIfNeeded);
 </script>
 </body>
 </html>

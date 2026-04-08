@@ -33,13 +33,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Set APP_BUILD, APP_TS and GEMINI_KEY in index.html
+      - name: Set APP_BUILD, APP_TS, GEMINI_KEY and HF_TOKEN in index.html
         run: |
           sed -i "s/const APP_BUILD = [0-9]*/const APP_BUILD = ${{ github.run_number }}/" www/index.html
           sed -i "s/const APP_TS = [0-9]*/const APP_TS = ${{ github.run_number }}/" www/index.html
           GKEY="${{ secrets.GEMINI_KEY }}"
           if [ -n "$GKEY" ]; then
             sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
+          fi
+          HF="${{ secrets.HF_TOKEN }}"
+          if [ -n "$HF" ]; then
+            sed -i "s|__HF_TOKEN__|$HF|g" www/index.html
           fi
           echo "APP_BUILD=${{ github.run_number }}, APP_TS=${{ github.run_number }}"
 
