@@ -153,17 +153,94 @@ jobs:
           sed -i 's/<application/<application android:requestLegacyExternalStorage="true" android:networkSecurityConfig="@xml\/network_security_config"/' \
             android/app/src/main/AndroidManifest.xml
 
-      - name: Inject MediaScanner plugin into MainActivity
+      - name: Inject AndroidBridge into MainActivity
         run: |
           MAIN=$(find android -name "MainActivity.java" | head -1)
-          if [ -z "$MAIN" ]; then
-            echo "MainActivity.java not found, skipping"
-            exit 0
-          fi
-          # Add MediaScanner import + addJavascriptInterface after super.onCreate
-          sed -i 's/import com\.getcapacitor\.BridgeActivity;/import com.getcapacitor.BridgeActivity;\nimport android.media.MediaScannerConnection;\nimport android.webkit.JavascriptInterface;/' "$MAIN"
-          sed -i 's/super\.onCreate(savedInstanceState);/super.onCreate(savedInstanceState);\n    getBridge().getWebView().addJavascriptInterface(new Object() {\n      @JavascriptInterface\n      public void scanFile(String path) {\n        MediaScannerConnection.scanFile(getApplicationContext(), new String[]{path}, null, null);\n      }\n    }, "AndroidMediaScanner");/' "$MAIN"
-          echo "Injected MediaScanner into $MAIN"
+          if [ -z "$MAIN" ]; then echo "MainActivity.java not found"; exit 1; fi
+          echo "Patching $MAIN"
+
+          python3 << 'PYEOF'
+          import re
+
+          path = __import__('subprocess').check_output(
+              ['find', 'android', '-name', 'MainActivity.java'], text=True
+          ).strip().splitlines()[0]
+
+          src = open(path).read()
+
+          # הוסף imports
+          imports = (
+              'import android.content.ContentValues;\n'
+              'import android.media.MediaScannerConnection;\n'
+              'import android.net.Uri;\n'
+              'import android.os.Build;\n'
+              'import android.os.Environment;\n'
+              'import android.provider.MediaStore;\n'
+              'import android.util.Base64;\n'
+              'import android.webkit.JavascriptInterface;\n'
+              'import java.io.File;\n'
+              'import java.io.FileOutputStream;\n'
+              'import java.io.OutputStream;\n'
+          )
+          src = src.replace(
+              'import com.getcapacitor.BridgeActivity;',
+              'import com.getcapacitor.BridgeActivity;\n' + imports
+          )
+
+          # הזרק JavaScript interface אחרי super.onCreate
+          bridge_code = r"""
+              getBridge().getWebView().addJavascriptInterface(new Object() {
+
+                  /** שמור קובץ ל-Downloads/Accident_Reports — עובד על כל גרסאות Android */
+                  @JavascriptInterface
+                  public String saveFile(String base64Data, String filename, String subFolder) {
+                      try {
+                          byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
+                          String relPath = "Accident_Reports" + (subFolder != null && !subFolder.isEmpty() ? "/" + subFolder : "");
+
+                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                              ContentValues cv = new ContentValues();
+                              cv.put(MediaStore.Downloads.DISPLAY_NAME, filename);
+                              cv.put(MediaStore.Downloads.MIME_TYPE, "image/jpeg");
+                              cv.put(MediaStore.Downloads.RELATIVE_PATH, "Download/" + relPath);
+                              Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                              if (uri == null) return "ERROR:MediaStore insert returned null";
+                              try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                                  os.write(data);
+                              }
+                              return "OK:Download/" + relPath + "/" + filename;
+                          } else {
+                              File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), relPath);
+                              dir.mkdirs();
+                              File file = new File(dir, filename);
+                              try (FileOutputStream fos = new FileOutputStream(file)) {
+                                  fos.write(data);
+                              }
+                              MediaScannerConnection.scanFile(getApplicationContext(), new String[]{file.getAbsolutePath()}, null, null);
+                              return "OK:" + file.getAbsolutePath();
+                          }
+                      } catch (Exception e) {
+                          return "ERROR:" + e.getMessage();
+                      }
+                  }
+
+                  /** סרוק קובץ קיים ל-MediaStore (גלריה) */
+                  @JavascriptInterface
+                  public void scanFile(String path) {
+                      MediaScannerConnection.scanFile(getApplicationContext(), new String[]{path}, null, null);
+                  }
+
+              }, "AndroidBridge");
+          """
+
+          src = src.replace(
+              'super.onCreate(savedInstanceState);',
+              'super.onCreate(savedInstanceState);\n' + bridge_code
+          )
+
+          open(path, 'w').write(src)
+          print("AndroidBridge injected into", path)
+          PYEOF
 
       - name: Build Release APK
         run: |
