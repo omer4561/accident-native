@@ -362,16 +362,17 @@
 
 <script>
   // ===================== LIVE BOOT — redirect APK to GitHub Pages =====================
-  // The APK is a bootstrapper only. Whenever online, the real app runs from GitHub Pages.
-  // This ensures auto-updates forever — user downloads ONE APK and never again.
   (async function liveBoot() {
     const PAGES = 'https://omer4561.github.io/accident-native/';
     if (!location.href.startsWith('capacitor://')) return; // already on Pages
+    // שמור את ה-build של ה-APK המותקן לפני המעבר ל-Pages
+    const myBuild = typeof APP_BUILD !== 'undefined' ? APP_BUILD : 0;
+    if (myBuild) localStorage.setItem('installed_build', String(myBuild));
     try {
       const r = await fetch(PAGES + 'version.json?t=' + Date.now(),
         { cache: 'no-store', signal: AbortSignal.timeout(4000) });
       if (r.ok) { location.replace(PAGES); }
-    } catch(e) { /* offline — use bundled APK version */ }
+    } catch(e) { /* offline */ }
   })();
 
   // ===================== TOAST =====================
@@ -535,8 +536,8 @@
       if (!r.ok) return;
       const { ts, apk, apk_url } = await r.json();
 
-      // בדיקת APK תמיד קודמת — חוסמת את האפליקציה
-      const currentBuild = typeof APP_BUILD !== 'undefined' ? APP_BUILD : 0;
+      // currentBuild: מה שנשמר ב-liveBoot מה-APK המותקן
+      const currentBuild = parseInt(localStorage.getItem('installed_build') || '0', 10);
       if (apk && apk > currentBuild) {
         _showApkUpdateOverlay(currentBuild, apk, apk_url);
         return;
