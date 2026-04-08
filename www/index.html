@@ -294,6 +294,13 @@
 <div id="saveToast"></div>
 
 <!-- Image viewer overlay -->
+<div id="pdfViewer" style="display:none;position:fixed;inset:0;z-index:20001;background:#000;flex-direction:column">
+  <div style="display:flex;align-items:center;padding:10px 16px;background:rgba(0,0,0,0.85);flex-shrink:0;direction:rtl">
+    <button onclick="closePdfViewer()" style="background:#1a73e8;border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;padding:8px 18px;border-radius:20px;white-space:nowrap">← חזרה</button>
+    <span id="pdfViewerTitle" style="color:#fff;font-size:14px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 10px"></span>
+  </div>
+  <iframe id="pdfViewerFrame" src="about:blank" style="width:100%;flex:1;border:none;background:#525659"></iframe>
+</div>
 <div id="imgViewer" style="display:none;position:fixed;inset:0;z-index:20000;background:#000;flex-direction:column">
   <div style="display:flex;align-items:center;padding:10px 16px;background:rgba(0,0,0,0.85);flex-shrink:0;direction:rtl">
     <button onclick="closeImgViewer()" style="background:#1a73e8;border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;padding:8px 18px;border-radius:20px;white-space:nowrap">← חזרה</button>
@@ -624,6 +631,17 @@
       }
     }
     content.innerHTML = html;
+  }
+
+  function openPdfViewer(dataUrl, title) {
+    document.getElementById('pdfViewerTitle').textContent = title || 'PDF';
+    document.getElementById('pdfViewerFrame').src = dataUrl;
+    document.getElementById('pdfViewer').style.display = 'flex';
+  }
+
+  function closePdfViewer() {
+    document.getElementById('pdfViewer').style.display = 'none';
+    document.getElementById('pdfViewerFrame').src = 'about:blank';
   }
 
   function closeImgViewer() {
@@ -1220,7 +1238,7 @@
     for (let i = 0; i < n; i++) {
       const { w, h, ch } = dims[i];
       const cs = ch === 1 ? '/DeviceGray' : '/DeviceRGB';
-      const cm = enc.encode(`q ${w} 0 0 ${h} 0 0 cm /Im Do Q`);
+      const cm = enc.encode(`q ${w} 0 0 -${h} 0 ${h} cm /Im Do Q`);
 
       mark(pid(i));
       s(`${pid(i)} 0 obj\n<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${w} ${h}]` +
@@ -1281,8 +1299,7 @@
       const base64 = await fileToBase64(file);
 
       // AndroidBridge — MediaStore API, שומר ל-Downloads/ (APK חדש)
-      // PDF מדלג על AndroidBridge כי הוא מקודד קשה image/jpeg
-      if (window.AndroidBridge && !filename.endsWith('.pdf')) {
+      if (window.AndroidBridge) {
         const result = window.AndroidBridge.saveFile(base64, filename, folder || '');
         if (!result || result.startsWith('ERROR:')) {
           throw new Error(result ? result.slice(6) : 'אין תגובה מ-AndroidBridge');
@@ -1379,24 +1396,22 @@
 
     try {
       const multiPage = items.length > 1;
-      const savedPaths = [];
-      for (let i = 0; i < items.length; i++) {
-        const filename = buildFilename(merged, i + 1, multiPage, '.jpg');
-        const saveResult = await saveFile(items[i].file, filename, folder.path);
-        savedPaths.push(saveResult.path);
-      }
-      const savedDir = 'DOWNLOADS';
+      const mergedFile = await mergePages(items.map(i => i.file));
+      const ext = multiPage ? '.pdf' : '.jpg';
+      const filename = buildFilename(merged, 1, false, ext);
+      const saveResult = await saveFile(mergedFile, filename, folder.path);
       const folderDisplay = `Accident_Reports/${folder.label}`;
 
-      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay, savedDir);
+      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, [saveResult.path], folderDisplay, saveResult.dir || 'DOWNLOADS');
 
       btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
+      showToast(`📂 Downloads/Accident_Reports/${folder.label}`);
 
-      const locMsg = multiPage
-        ? `📂 נשמרו ${items.length} קבצים — Downloads/Accident_Reports/${folder.label}`
-        : `📂 Downloads/Accident_Reports/${folder.label}`;
-      showToast(locMsg);
+      if (multiPage) {
+        const base64 = await fileToBase64(mergedFile);
+        openPdfViewer('data:application/pdf;base64,' + base64, filename);
+      }
       startResetTimer();
     } catch(e) {
       btn.textContent = `❌ ${e.message}`;
