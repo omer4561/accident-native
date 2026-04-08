@@ -670,7 +670,15 @@
         else if (res) throw new Error(res.slice(6));
       }
 
-      if (!base64) throw new Error('לא נמצא הקובץ — דרוש APK מעודכן');
+      if (!base64 && window.Capacitor?.isNativePlatform?.()) {
+        const { Filesystem } = window.Capacitor.Plugins;
+        const dirs = r.dir ? [r.dir] : ['EXTERNAL_STORAGE', 'EXTERNAL', 'DATA'];
+        for (const dir of dirs) {
+          try { const d = await Filesystem.readFile({ path, directory: dir }); base64 = d.data; break; } catch(e) {}
+        }
+      }
+
+      if (!base64) throw new Error('לא נמצא הקובץ');
       img.src = `data:image/jpeg;base64,${base64}`;
       // מחכה לטעינה ואז מסיר את ה-toast
       img.onload = () => { document.getElementById('saveToast').classList.remove('show'); };
