@@ -634,7 +634,7 @@
     try {
       if (!window.Capacitor?.isNativePlatform?.()) { showToast('⚠️ זמין רק באפליקציה'); return; }
       const { Filesystem } = window.Capacitor.Plugins;
-      const DIRS = r.dir ? [r.dir] : ['EXTERNAL', 'DOCUMENTS', 'DATA'];
+      const DIRS = r.dir ? [r.dir] : ['EXTERNAL_STORAGE', 'EXTERNAL', 'DATA'];
 
       // קרא כל קובץ חזרה
       const files = [];
@@ -1118,35 +1118,33 @@
   }
 
   async function saveFile(file, filename, folder) {
-    const subPath = folder ? `Accident_Reports/${folder}/${filename}` : `Accident_Reports/${filename}`;
-    const dirPath  = folder ? `Accident_Reports/${folder}` : 'Accident_Reports';
+    // Downloads/Accident_Reports/YYYY_MM/filename.jpg — נגיש מניהול הקבצים
+    const subPath = folder ? `Downloads/Accident_Reports/${folder}/${filename}` : `Downloads/Accident_Reports/${filename}`;
+    const dirPath  = folder ? `Downloads/Accident_Reports/${folder}` : `Downloads/Accident_Reports`;
 
     if (window.Capacitor?.isNativePlatform?.()) {
       const { Filesystem } = window.Capacitor.Plugins;
 
-      // בקש הרשאות כתיבה לפני הניסיון הראשון
-      try { await Filesystem.requestPermissions(); } catch(e) { /* לא נתמך בכל הגרסאות */ }
+      try { await Filesystem.requestPermissions(); } catch(e) { /* silent */ }
 
       const base64 = await fileToBase64(file);
 
+      // EXTERNAL_STORAGE = שורש האחסון הציבורי — נגיש מניהול הקבצים
+      // DATA = fallback לאחסון פנימי אם הכל נכשל
       const TRIES = [
+        { path: subPath, directory: 'EXTERNAL_STORAGE' },
         { path: subPath, directory: 'EXTERNAL' },
-        { path: subPath, directory: 'DOCUMENTS' },
         { path: subPath, directory: 'DATA' },
       ];
       let lastErr = '';
       for (const t of TRIES) {
         try {
-          // יצירת תיקייה מפורשת לפני הכתיבה
           await Filesystem.mkdir({ path: dirPath, directory: t.directory, recursive: true }).catch(() => {});
           await Filesystem.writeFile({ path: t.path, data: base64, directory: t.directory, recursive: true });
-          // סרוק ל-MediaStore — הקובץ יופיע בגלריה
           try {
             const { uri } = await Filesystem.getUri({ path: t.path, directory: t.directory });
             const absolutePath = uri.replace('file://', '');
-            if (window.AndroidMediaScanner) {
-              window.AndroidMediaScanner.scanFile(absolutePath);
-            }
+            if (window.AndroidMediaScanner) window.AndroidMediaScanner.scanFile(absolutePath);
           } catch(e) { /* silent */ }
           return { path: t.path, dir: t.directory };
         } catch(e) {
@@ -1231,10 +1229,10 @@
       btn.textContent = '✅ נשמר';
       btn.style.background = '#34a853';
 
-      const locMsg = savedDir === 'EXTERNAL'  ? '📂 Android/data/.../Accident_Reports/' + folder.label
-                   : savedDir === 'DOCUMENTS' ? '📂 אחסון פנימי/Accident_Reports/' + folder.label
-                   : savedDir === 'DATA'      ? '📂 אחסון אפליקציה/Accident_Reports/' + folder.label
-                   :                            '📥 הורד לטלפון';
+      const locMsg = savedDir === 'EXTERNAL_STORAGE' ? '📂 Downloads/Accident_Reports/' + folder.label
+                   : savedDir === 'EXTERNAL'        ? '📂 Android/data/.../Accident_Reports/' + folder.label
+                   : savedDir === 'DATA'            ? '📂 אחסון פנימי/Accident_Reports/' + folder.label
+                   :                                  '📥 הורד לטלפון';
       showToast(locMsg);
       startResetTimer(); // מאפס אחרי resetDelay שניות מהגדרות
     } catch(e) {
