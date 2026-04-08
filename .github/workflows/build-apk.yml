@@ -215,7 +215,8 @@ jobs:
                           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                               ContentValues cv = new ContentValues();
                               cv.put(MediaStore.Downloads.DISPLAY_NAME, filename);
-                              cv.put(MediaStore.Downloads.MIME_TYPE, "image/jpeg");
+                              String mimeType = filename.endsWith(".pdf") ? "application/pdf" : "image/jpeg";
+                              cv.put(MediaStore.Downloads.MIME_TYPE, mimeType);
                               cv.put(MediaStore.Downloads.RELATIVE_PATH, "Download/" + relPath);
                               Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
                               if (uri == null) return "ERROR:MediaStore insert returned null";
