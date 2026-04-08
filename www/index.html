@@ -609,11 +609,16 @@
         for (const r of reps) {
           const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
           const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
+          const viewBtns = (r.files || []).map((path, i) => {
+            const fname = path.split('/').pop();
+            return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
+          }).join('');
           html += `<div class="report-item">
             <div class="ri-plate">🚗 ${plate}</div>
             <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 👤 ${r.driver || 'לא זוהה'}</div>
             <div class="ri-files">${files}</div>
             <div class="ri-actions">
+              ${viewBtns}
               ${r.files && r.files.length > 1 ? `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();mergeHistoryReport(${r.id})">🔗 קבץ</button>` : ''}
               <button class="ri-btn ri-btn-del" onclick="event.stopPropagation();trashReport(${r.id})">🗑️ מחק</button>
             </div></div>`;
@@ -622,6 +627,32 @@
       }
     }
     content.innerHTML = html;
+  }
+
+  async function openFile(id, idx) {
+    const r = history.find(x => x.id === id);
+    if (!r || !r.files || !r.files[idx]) return;
+    const path = r.files[idx];
+
+    if (window.AndroidBridge) {
+      const result = window.AndroidBridge.openFile(path);
+      if (result && result.startsWith('ERROR:')) showToast('❌ ' + result.slice(6));
+      return;
+    }
+    // web fallback — הצג בתוך הדפדפן
+    if (window.Capacitor?.isNativePlatform?.()) {
+      const { Filesystem } = window.Capacitor.Plugins;
+      const dirs = r.dir ? [r.dir] : ['EXTERNAL_STORAGE', 'EXTERNAL', 'DATA'];
+      for (const dir of dirs) {
+        try {
+          const { data } = await Filesystem.readFile({ path, directory: dir });
+          const w = window.open();
+          w.document.write(`<img src="data:image/jpeg;base64,${data}" style="max-width:100%">`);
+          return;
+        } catch(e) {}
+      }
+      showToast('❌ לא נמצא הקובץ');
+    }
   }
 
   async function mergeHistoryReport(id) {

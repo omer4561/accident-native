@@ -184,6 +184,7 @@ jobs:
           imports = (
               'import android.content.ContentValues;\n'
               'import android.content.Intent;\n'
+              'import android.database.Cursor;\n'
               'import android.media.MediaScannerConnection;\n'
               'import android.net.Uri;\n'
               'import android.os.Build;\n'
@@ -290,6 +291,53 @@ jobs:
                   @JavascriptInterface
                   public int getInstalledBuild() {
                       return __APK_BUILD__;
+                  }
+
+                  /** פתח קובץ בגלריה/viewer המובנה של Android */
+                  @JavascriptInterface
+                  public String openFile(String filePath) {
+                      try {
+                          // בנה URI לפי הנתיב השמור (Download/Accident_Reports/...)
+                          // נסה MediaStore קודם — מחזיר URI שניתן לשתף
+                          android.database.Cursor cursor = null;
+                          Uri fileUri = null;
+
+                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                              String[] proj = { MediaStore.Downloads._ID };
+                              String sel = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND " +
+                                           MediaStore.Downloads.DISPLAY_NAME + "=?";
+                              String fname = new File(filePath).getName();
+                              String relDir = filePath.contains("/") ?
+                                  filePath.substring(0, filePath.lastIndexOf('/') + 1) : "";
+                              cursor = getContentResolver().query(
+                                  MediaStore.Downloads.EXTERNAL_CONTENT_URI, proj,
+                                  sel, new String[]{ "%" + relDir + "%", fname }, null);
+                              if (cursor != null && cursor.moveToFirst()) {
+                                  long id = cursor.getLong(0);
+                                  fileUri = Uri.withAppendedPath(
+                                      MediaStore.Downloads.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                              }
+                              if (cursor != null) cursor.close();
+                          }
+
+                          if (fileUri == null) {
+                              // fallback: נתיב ישיר
+                              File f = new File(
+                                  Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                                  filePath.replaceFirst("^Download/", ""));
+                              if (!f.exists()) return "ERROR:קובץ לא נמצא: " + f.getAbsolutePath();
+                              fileUri = androidx.core.content.FileProvider.getUriForFile(
+                                  getApplicationContext(), getPackageName() + ".fileprovider", f);
+                          }
+
+                          Intent intent = new Intent(Intent.ACTION_VIEW);
+                          intent.setDataAndType(fileUri, "image/jpeg");
+                          intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                          startActivity(intent);
+                          return "OK";
+                      } catch (Exception e) {
+                          return "ERROR:" + e.getMessage();
+                      }
                   }
 
                   /** סרוק קובץ ל-MediaStore */
