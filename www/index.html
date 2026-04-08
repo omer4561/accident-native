@@ -1177,53 +1177,93 @@
   }
 
   // ===================== MERGE PAGES =====================
+
+  // מנתח כותרת JPEG: מחזיר רוחב, גובה, מספר ערוצים
+  function _parseJpeg(bytes) {
+    let i = 2;
+    while (i < bytes.length - 1) {
+      if (bytes[i] !== 0xFF) break;
+      const m = bytes[i + 1];
+      if (m >= 0xC0 && m <= 0xC3) {
+        return { w: (bytes[i+7]<<8)|bytes[i+8], h: (bytes[i+5]<<8)|bytes[i+6], ch: bytes[i+9] };
+      }
+      if ((m >= 0xD0 && m <= 0xD9) || m === 0x01) { i += 2; continue; }
+      if (i + 3 >= bytes.length) break;
+      i += 2 + ((bytes[i+2]<<8)|bytes[i+3]);
+    }
+    return { w: 1240, h: 1754, ch: 3 };
+  }
+
+  // בונה PDF בינארי ללא ספריות — מטמיע JPEG גולמי עם DCTDecode
+  function _buildPdf(jpegs, dims) {
+    const n = jpegs.length;
+    const pid = i => 3 + i * 3;   // Page obj
+    const iid = i => 4 + i * 3;   // Image XObject
+    const cid = i => 5 + i * 3;   // Content stream
+    const parts = [], ofs = {};
+    let pos = 0;
+    const enc = new TextEncoder();
+    const s = t => { const b = enc.encode(t); parts.push(b); pos += b.length; };
+    const b = d => { parts.push(d); pos += d.length; };
+    const mark = id => { ofs[id] = pos; };
+
+    s('%PDF-1.4\n');
+
+    mark(1);
+    s('1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n');
+
+    mark(2);
+    s('2 0 obj\n<</Type/Pages/Kids[' +
+      Array.from({length: n}, (_, i) => `${pid(i)} 0 R`).join(' ') +
+      `]/Count ${n}>>\nendobj\n`);
+
+    for (let i = 0; i < n; i++) {
+      const { w, h, ch } = dims[i];
+      const cs = ch === 1 ? '/DeviceGray' : '/DeviceRGB';
+      const cm = enc.encode(`q ${w} 0 0 ${h} 0 0 cm /Im Do Q`);
+
+      mark(pid(i));
+      s(`${pid(i)} 0 obj\n<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${w} ${h}]` +
+        `/Resources<</XObject<</Im ${iid(i)} 0 R>>>>/Contents ${cid(i)} 0 R>>\nendobj\n`);
+
+      mark(iid(i));
+      s(`${iid(i)} 0 obj\n<</Type/XObject/Subtype/Image/Width ${w}/Height ${h}` +
+        `/ColorSpace ${cs}/BitsPerComponent 8/Filter/DCTDecode/Length ${jpegs[i].length}>>\nstream\n`);
+      b(jpegs[i]);
+      s('\nendstream\nendobj\n');
+
+      mark(cid(i));
+      s(`${cid(i)} 0 obj\n<</Length ${cm.length}>>\nstream\n`);
+      b(cm);
+      s('\nendstream\nendobj\n');
+    }
+
+    const xPos = pos;
+    const maxId = 2 + n * 3;
+    s(`xref\n0 ${maxId + 1}\n0000000000 65535 f \n`);
+    for (let id = 1; id <= maxId; id++) {
+      s(String(ofs[id] ?? 0).padStart(10, '0') + ' 00000 n \n');
+    }
+    s(`trailer\n<</Size ${maxId + 1}/Root 1 0 R>>\nstartxref\n${xPos}\n%%EOF\n`);
+
+    let total = 0; for (const p of parts) total += p.length;
+    const out = new Uint8Array(total);
+    let off = 0; for (const p of parts) { out.set(p, off); off += p.length; }
+    return out;
+  }
+
   async function mergePages(files) {
     if (files.length === 1) return files[0];
 
-    // טעינה עצלה של jsPDF — רק כשצריך מיזוג
-    if (!window.jspdf) {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
-        s.onload = resolve;
-        s.onerror = () => reject(new Error('נכשלה טעינת ספריית PDF'));
-        document.head.appendChild(s);
-      });
-    }
-
-    // המר כל קובץ ל-data URL
-    const dataUrls = await Promise.all(files.map(file => new Promise((resolve, reject) => {
+    const jpegs = await Promise.all(files.map(f => new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = e => resolve(e.target.result);
+      reader.onload = e => resolve(new Uint8Array(e.target.result));
       reader.onerror = reject;
-      reader.readAsDataURL(file);
+      reader.readAsArrayBuffer(f);
     })));
 
-    // טען תמונות
-    const imgs = await Promise.all(dataUrls.map(src => new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('טעינת תמונה נכשלה'));
-      img.src = src;
-    })));
-
-    // צור PDF — עמוד נפרד לכל תמונה
-    const { jsPDF } = window.jspdf;
-    let pdf = null;
-    for (let i = 0; i < imgs.length; i++) {
-      const w = imgs[i].naturalWidth  || 1920;
-      const h = imgs[i].naturalHeight || 2560;
-      const orientation = w >= h ? 'l' : 'p';
-      if (i === 0) {
-        pdf = new jsPDF({ orientation, unit: 'px', format: [w, h], compress: true });
-      } else {
-        pdf.addPage([w, h], orientation);
-      }
-      pdf.addImage(dataUrls[i], 'JPEG', 0, 0, w, h);
-    }
-
-    const pdfBytes = pdf.output('arraybuffer');
-    return new File([pdfBytes], 'merged.pdf', { type: 'application/pdf' });
+    const dims = jpegs.map(_parseJpeg);
+    return new File([_buildPdf(jpegs, dims)], 'merged.pdf', { type: 'application/pdf' });
   }
 
   // ===================== FILE SAVE =====================
