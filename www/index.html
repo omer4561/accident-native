@@ -376,6 +376,7 @@
         <input id="regEmail" type="email" placeholder="user@example.com"
           style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:ltr">
       </div>
+      <div id="regError1" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px;font-size:14px;margin-bottom:12px;text-align:center"></div>
       <button id="regSendBtn" onclick="sendOTP()"
         style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer">
         שלח קוד אימות →
@@ -393,6 +394,7 @@
           style="width:100%;padding:14px;border:1.5px solid #ddd;border-radius:8px;font-size:22px;box-sizing:border-box;direction:ltr;text-align:center;letter-spacing:6px"
           oninput="if(this.value.length>6)this.value=this.value.slice(0,6)">
       </div>
+      <div id="regError2" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px;font-size:14px;margin-bottom:12px;text-align:center"></div>
       <button onclick="verifyOTP()"
         style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;margin-bottom:10px">
         אמת ואשר הרשמה ←
@@ -480,11 +482,19 @@
       document.getElementById('registrationOverlay').style.display = 'flex';
   }
 
+  function _regErr(step, msg) {
+    const el = document.getElementById('regError' + step);
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+  }
+
   async function sendOTP() {
+    _regErr(1, '');
     const name = document.getElementById('regName').value.trim();
     const email = document.getElementById('regEmail').value.trim();
-    if (!name) { showToast('נא להזין שם מלא'); return; }
-    if (!email || !email.includes('@') || !email.includes('.')) { showToast('נא להזין כתובת מייל תקינה'); return; }
+    if (!name) { _regErr(1, 'נא להזין שם מלא'); return; }
+    if (!email || !email.includes('@') || !email.includes('.')) { _regErr(1, 'נא להזין כתובת מייל תקינה'); return; }
 
     const btn = document.getElementById('regSendBtn');
     btn.disabled = true; btn.textContent = '⏳ שולח...';
@@ -504,22 +514,23 @@
           template_params: { to_email: email, otp_code: code, user_name: name }
         })
       });
-      if (!res.ok) throw new Error(`EmailJS error ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`שגיאה ${res.status}: ${await res.text()}`);
       document.getElementById('regEmailDisplay').textContent = email;
       document.getElementById('regStep1').style.display = 'none';
       document.getElementById('regStep2').style.display = 'block';
     } catch(e) {
-      showToast('❌ ' + e.message, 8000);
+      _regErr(1, '❌ ' + e.message);
       btn.disabled = false; btn.textContent = 'שלח קוד אימות →';
     }
   }
 
   function verifyOTP() {
+    _regErr(2, '');
     const entered = document.getElementById('regOTP').value.trim();
     const pending = JSON.parse(localStorage.getItem('pending_otp') || 'null');
-    if (!pending) { showToast('שלח קוד מחדש'); return; }
-    if (Date.now() > pending.expiry) { showToast('הקוד פג תוקף — שלח מחדש'); return; }
-    if (entered !== pending.code) { showToast('קוד שגוי — נסה שוב'); return; }
+    if (!pending) { _regErr(2, 'שלח קוד מחדש'); return; }
+    if (Date.now() > pending.expiry) { _regErr(2, 'הקוד פג תוקף — שלח מחדש'); return; }
+    if (entered !== pending.code) { _regErr(2, 'קוד שגוי — נסה שוב'); return; }
 
     localStorage.removeItem('pending_otp');
     const profile = { name: pending.name, email: pending.email, registeredAt: Date.now(), userId };
