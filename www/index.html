@@ -400,9 +400,33 @@
     showToast(newKey ? '✅ מפתח Gemini נשמר' : '✅ הגדרות נשמרו');
   }
 
-  function startResetTimer() {
+  function startResetTimer(delaySec) {
     if (resetTimer) clearTimeout(resetTimer);
-    resetTimer = setTimeout(resetUI, 3000);
+    resetTimer = setTimeout(resetUI, (delaySec ?? resetDelay) * 1000);
+  }
+
+  let errorCountdownInterval = null;
+  function startErrorCountdown(sec) {
+    if (errorCountdownInterval) clearInterval(errorCountdownInterval);
+    if (resetTimer) clearTimeout(resetTimer);
+    let remaining = sec;
+    const toast = document.getElementById('saveToast');
+    const update = () => {
+      toast.textContent = `❌ שמירה נכשלה — מוחק תמונות בעוד ${remaining}ש'`;
+      toast.classList.add('show');
+    };
+    update();
+    errorCountdownInterval = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(errorCountdownInterval);
+        errorCountdownInterval = null;
+        toast.classList.remove('show');
+        resetUI();
+      } else {
+        update();
+      }
+    }, 1000);
   }
 
   function resetUI() {
@@ -1089,10 +1113,12 @@
 
     if (window.Capacitor?.isNativePlatform?.()) {
       const { Filesystem } = window.Capacitor.Plugins;
+
+      // בקש הרשאות כתיבה לפני הניסיון הראשון
+      try { await Filesystem.requestPermissions(); } catch(e) { /* לא נתמך בכל הגרסאות */ }
+
       const base64 = await fileToBase64(file);
 
-      // Android 10+ אינו מאפשר EXTERNAL_STORAGE ללא MANAGE_EXTERNAL_STORAGE
-      // EXTERNAL = getExternalFilesDir() — אינו דורש הרשאה כלל
       const TRIES = [
         { path: subPath, directory: 'EXTERNAL' },
         { path: subPath, directory: 'DOCUMENTS' },
@@ -1135,9 +1161,7 @@
     if (window.groupsData[key]) {
       window.groupsData[key].forEach(item => { item.data[field] = value || null; });
     }
-    // איפוס אוטומטי רק אחרי שכל הקבוצות מולאו
-    if (allGroupsFilled()) startResetTimer();
-    else { if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; } }
+    // אל תתחיל טיימר בעת הקלדה — רק אחרי שמירה מוצלחת
   }
 
   function allGroupsFilled() {
@@ -1163,14 +1187,20 @@
       await saveFile(item.file, filename, folder.path);
       btn.textContent = `✅ עמוד ${idx+1}`;
       btn.style.background = '#34a853'; btn.style.color = 'white';
+      startResetTimer();
     } catch(e) {
-      btn.textContent = `❌ ${e.message.slice(0,20)}`; btn.disabled = false;
+      btn.textContent = `❌ שגיאה`; btn.disabled = false;
+      showToast('❌ ' + e.message, 6000);
+      startErrorCountdown(20);
     }
   }
 
   async function saveGroup(key, btn) {
     const items = window.groupsData[key];
     if (!items) return;
+    // ביטול countdown שגיאה קיים אם המשתמש מנסה שוב
+    if (errorCountdownInterval) { clearInterval(errorCountdownInterval); errorCountdownInterval = null; }
+    if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
     btn.disabled = true;
     btn.textContent = '⏳ שומר...';
 
@@ -1196,11 +1226,13 @@
                    : savedDir === 'DATA'      ? '📂 אחסון אפליקציה/Accident_Reports/' + folder.label
                    :                            '📥 הורד לטלפון';
       showToast(locMsg);
-      if (allGroupsFilled()) startResetTimer();
+      startResetTimer(); // מאפס אחרי resetDelay שניות מהגדרות
     } catch(e) {
-      btn.textContent = `❌ ${e.message}`;
+      btn.textContent = `❌ שגיאה — מנסה שוב?`;
       btn.style.background = '#c5221f';
       btn.disabled = false;
+      showToast('❌ ' + e.message, 6000);
+      startErrorCountdown(20); // מוחק תמונות אחרי 20 שניות
     }
   }
 
@@ -1295,8 +1327,6 @@
     showResults(results, errors);
     document.getElementById('processBtn').disabled = false;
     document.getElementById('processBtn').textContent = `🔍 עבד ${selectedFiles.length} תמונות`;
-    // אם זוהה הכל אוטומטית — מתחיל טיימר מיד
-    if (allGroupsFilled()) startResetTimer();
   }
 
   // ===================== SHOW RESULTS =====================
