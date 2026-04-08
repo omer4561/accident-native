@@ -22,7 +22,12 @@ jobs:
           if [ -n "$GKEY" ]; then
             sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
           fi
-          echo "{\"ts\":$TS}" > www/version.json
+          # שמור את apk מה-version.json הפרוס הקיים (מעודכן רק ע"י build-apk.yml)
+          APK_VER=0
+          curl -sf "https://omer4561.github.io/accident-native/version.json" -o /tmp/v.json 2>/dev/null \
+            && APK_VER=$(python3 -c "import json; print(json.load(open('/tmp/v.json')).get('apk',0))" 2>/dev/null || echo 0) \
+            || true
+          echo "{\"ts\":$TS,\"apk\":$APK_VER}" > www/version.json
 
       - name: Deploy www/ to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4

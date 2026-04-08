@@ -339,6 +339,7 @@
   </div>
 </div>
 
+<!-- עדכון תוכן אוטומטי (web) — progress bar בלבד -->
 <div id="updateOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#1a73e8;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:inherit;text-align:center;padding:32px">
   <div style="font-size:64px;margin-bottom:24px">🔄</div>
   <div style="font-size:26px;font-weight:700;margin-bottom:12px">עדכון זמין!</div>
@@ -346,6 +347,20 @@
   <div style="width:60%;height:6px;background:rgba(255,255,255,0.3);border-radius:3px;overflow:hidden">
     <div id="updateBar" style="height:100%;width:0;background:#fff;border-radius:3px;transition:width 1.8s ease"></div>
   </div>
+</div>
+
+<!-- עדכון APK חובה — חוסם את האפליקציה לחלוטין -->
+<div id="apkUpdateOverlay" style="display:none;position:fixed;inset:0;z-index:10000;background:#1a1a2e;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:inherit;text-align:center;padding:32px">
+  <div style="font-size:72px;margin-bottom:20px">📲</div>
+  <div style="font-size:24px;font-weight:700;margin-bottom:12px">נדרש עדכון חובה</div>
+  <div style="font-size:15px;opacity:0.8;margin-bottom:8px">גרסה חדשה של האפליקציה זמינה.</div>
+  <div style="font-size:14px;opacity:0.65;margin-bottom:36px">יש למחוק את האפליקציה הישנה ולהוריד מחדש.</div>
+  <a id="apkDownloadBtn"
+     href="https://github.com/omer4561/accident-native/releases/latest"
+     style="background:#1a73e8;color:#fff;text-decoration:none;padding:16px 40px;border-radius:12px;font-size:18px;font-weight:700;display:inline-block;margin-bottom:16px">
+    ⬇️ עדכן עכשיו
+  </a>
+  <div style="font-size:12px;opacity:0.45;margin-top:8px" id="apkVerLine"></div>
 </div>
 
 <script>
@@ -450,13 +465,35 @@
     window.groupsData = {};
   }
 
-  // ===================== UPDATE CHECK (רץ רק על GitHub Pages) =====================
-  // כשיש גרסה חדשה — reload מ-Pages (עוקף cache)
+  // ===================== UPDATE CHECK =====================
+
+  // בקשת הרשאת התראות — אוטומטית בהפעלה ראשונה
+  (function requestNotifPermission() {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  })();
+
   function _showUpdateOverlay() {
     const overlay = document.getElementById('updateOverlay');
     overlay.style.display = 'flex';
     requestAnimationFrame(() => { document.getElementById('updateBar').style.width = '100%'; });
     setTimeout(() => { overlay.style.display = 'none'; }, 2200);
+  }
+
+  function _showApkUpdateOverlay(currentBuild, requiredBuild) {
+    const overlay = document.getElementById('apkUpdateOverlay');
+    document.getElementById('apkVerLine').textContent =
+      `גרסה מותקנת: ${currentBuild || '?'} | נדרשת: ${requiredBuild}`;
+    overlay.style.display = 'flex';
+    // שלח התראה גם אם האפליקציה ברקע
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification('נדרש עדכון — דוחות תאונה', {
+        body: 'גרסה חדשה זמינה. לחץ לעדכון.',
+        icon: '/accident-native/icon.png'
+      });
+    }
   }
 
   (async function checkUpdate() {
@@ -473,10 +510,19 @@
         { cache: 'no-store' }
       );
       if (!r.ok) return;
-      const { ts } = await r.json();
+      const { ts, apk } = await r.json();
+
+      // בדיקת עדכון APK — חוסם את האפליקציה אם גרסת APK ישנה מדי
+      const currentBuild = typeof APP_BUILD !== 'undefined' ? APP_BUILD : 0;
+      if (apk && currentBuild && apk > currentBuild) {
+        _showApkUpdateOverlay(currentBuild, apk);
+        return; // לא ממשיך לאחר הצגת מסך חסימה
+      }
+
+      // בדיקת עדכון תוכן רגיל
       if (ts && ts > Math.max(APP_TS || 0, stored)) {
         localStorage.setItem('app_ts', String(ts));
-        location.reload(true); // on Pages — works correctly
+        location.reload(true);
       }
     } catch(e) { /* אין רשת */ }
   })();

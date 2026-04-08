@@ -273,3 +273,17 @@ jobs:
           3. אשר התקנה ממקורות לא ידועים"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump apk version in deployed version.json
+        run: |
+          # עדכן apk ב-version.json על gh-pages ישירות
+          git clone --branch gh-pages --depth 1 \
+            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/omer4561/accident-native.git /tmp/gh-pages
+          cd /tmp/gh-pages
+          TS=$(python3 -c "import json; print(json.load(open('version.json')).get('ts',0))" 2>/dev/null || echo 0)
+          echo "{\"ts\":$TS,\"apk\":${{ github.run_number }}}" > version.json
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add version.json
+          git commit -m "chore: bump apk to v${{ github.run_number }} [skip ci]"
+          git push
