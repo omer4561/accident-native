@@ -7,7 +7,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
   <script src="ocr-engine.js"></script>
-  <script>const APP_TS = 0; const APP_BUILD = 0; const GEMINI_KEY = ''; const HF_TOKEN = '__HF_TOKEN__';</script>
+  <script>const APP_TS = 0; const APP_BUILD = 0; const GEMINI_KEY = ''; const HF_TOKEN = '__HF_TOKEN__';
+    const EMAILJS_SERVICE = '__EMAILJS_SERVICE__'; const EMAILJS_TEMPLATE = '__EMAILJS_TEMPLATE__'; const EMAILJS_KEY = '__EMAILJS_KEY__';
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script>if(typeof emailjs !== 'undefined' && EMAILJS_KEY && EMAILJS_KEY !== '__EMAILJS_KEY__') emailjs.init(EMAILJS_KEY);</script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; direction: rtl; }
@@ -361,20 +365,46 @@
     <div style="text-align:center;font-size:40px;margin-bottom:8px">🪪</div>
     <h2 style="margin:0 0 6px;text-align:center;font-size:20px;color:#1a73e8">הרשמה לאפליקציה</h2>
     <p style="margin:0 0 20px;text-align:center;font-size:13px;color:#666">נדרש פעם אחת בלבד</p>
-    <div style="margin-bottom:12px">
-      <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">שם מלא *</label>
-      <input id="regName" type="text" placeholder="ישראל ישראלי"
-        style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:rtl">
+
+    <!-- שלב 1: שם + מייל -->
+    <div id="regStep1">
+      <div style="margin-bottom:12px">
+        <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">שם מלא *</label>
+        <input id="regName" type="text" placeholder="ישראל ישראלי"
+          style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:rtl">
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">כתובת מייל *</label>
+        <input id="regEmail" type="email" placeholder="user@example.com"
+          style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:ltr">
+      </div>
+      <button id="regSendBtn" onclick="sendOTP()"
+        style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer">
+        שלח קוד אימות →
+      </button>
     </div>
-    <div style="margin-bottom:20px">
-      <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">מספר אישי *</label>
-      <input id="regId" type="text" placeholder="1234567"
-        style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:ltr;text-align:right">
+
+    <!-- שלב 2: הזנת קוד -->
+    <div id="regStep2" style="display:none">
+      <p style="margin-bottom:16px;font-size:14px;color:#555;text-align:center">
+        קוד נשלח אל<br><strong id="regEmailDisplay" style="color:#1a73e8;direction:ltr;unicode-bidi:plaintext"></strong>
+      </p>
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">קוד 6 ספרות *</label>
+        <input id="regOTP" type="number" placeholder="123456" maxlength="6"
+          style="width:100%;padding:14px;border:1.5px solid #ddd;border-radius:8px;font-size:22px;box-sizing:border-box;direction:ltr;text-align:center;letter-spacing:6px"
+          oninput="if(this.value.length>6)this.value=this.value.slice(0,6)">
+      </div>
+      <button onclick="verifyOTP()"
+        style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;margin-bottom:10px">
+        אמת ואשר הרשמה ←
+      </button>
+      <button onclick="document.getElementById('regStep2').style.display='none';document.getElementById('regStep1').style.display='block'"
+        style="width:100%;padding:10px;background:transparent;border:1.5px solid #ccc;border-radius:10px;font-size:14px;cursor:pointer;color:#666">
+        ← חזרה
+      </button>
+      <p style="margin-top:10px;font-size:12px;color:#aaa;text-align:center">הקוד בתוקף ל-10 דקות</p>
     </div>
-    <button onclick="submitRegistration()"
-      style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer">
-      שמור והמשך ←
-    </button>
   </div>
 </div>
 
@@ -448,24 +478,57 @@
 
   function showRegistrationIfNeeded() {
     const p = JSON.parse(localStorage.getItem('user_profile') || 'null');
-    if (!p || !p.name || !p.personalId)
+    if (!p || !p.name || !p.email)
       document.getElementById('registrationOverlay').style.display = 'flex';
   }
 
-  async function submitRegistration() {
+  async function sendOTP() {
     const name = document.getElementById('regName').value.trim();
-    const personalId = document.getElementById('regId').value.trim();
-    if (!name || !personalId) { showToast('נא למלא את כל השדות'); return; }
-    const profile = { name, personalId, registeredAt: Date.now(), userId };
+    const email = document.getElementById('regEmail').value.trim();
+    if (!name) { showToast('נא להזין שם מלא'); return; }
+    if (!email || !email.includes('@') || !email.includes('.')) { showToast('נא להזין כתובת מייל תקינה'); return; }
+
+    const btn = document.getElementById('regSendBtn');
+    btn.disabled = true; btn.textContent = '⏳ שולח...';
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    localStorage.setItem('pending_otp', JSON.stringify({ code, email, name, expiry: Date.now() + 600000 }));
+
+    try {
+      if (!EMAILJS_KEY || EMAILJS_KEY === '__EMAILJS_KEY__') throw new Error('EmailJS לא מוגדר');
+      await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, { to_email: email, otp_code: code, user_name: name });
+      document.getElementById('regEmailDisplay').textContent = email;
+      document.getElementById('regStep1').style.display = 'none';
+      document.getElementById('regStep2').style.display = 'block';
+    } catch(e) {
+      showToast('❌ שגיאה בשליחת מייל: ' + e.message);
+      btn.disabled = false; btn.textContent = 'שלח קוד אימות →';
+    }
+  }
+
+  function verifyOTP() {
+    const entered = document.getElementById('regOTP').value.trim();
+    const pending = JSON.parse(localStorage.getItem('pending_otp') || 'null');
+    if (!pending) { showToast('שלח קוד מחדש'); return; }
+    if (Date.now() > pending.expiry) { showToast('הקוד פג תוקף — שלח מחדש'); return; }
+    if (entered !== pending.code) { showToast('קוד שגוי — נסה שוב'); return; }
+
+    localStorage.removeItem('pending_otp');
+    const profile = { name: pending.name, email: pending.email, registeredAt: Date.now(), userId };
     localStorage.setItem('user_profile', JSON.stringify(profile));
     document.getElementById('registrationOverlay').style.display = 'none';
     hfCommit(`users/${userId}.json`, JSON.stringify(profile)).catch(() => {});
+    showToast('✅ נרשמת בהצלחה!');
   }
 
   function editProfile() {
     const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
     document.getElementById('regName').value = p.name || '';
-    document.getElementById('regId').value = p.personalId || '';
+    document.getElementById('regEmail').value = p.email || '';
+    document.getElementById('regStep1').style.display = 'block';
+    document.getElementById('regStep2').style.display = 'none';
+    document.getElementById('regSendBtn').disabled = false;
+    document.getElementById('regSendBtn').textContent = 'שלח קוד אימות →';
     closeSettings();
     document.getElementById('registrationOverlay').style.display = 'flex';
   }
@@ -493,7 +556,7 @@
     await hfCommit(`data/${userId}/${reportId}.json`, JSON.stringify({
       reportId, userId,
       userName: profile.name || '',
-      personalId: profile.personalId || '',
+      userEmail: profile.email || '',
       plate: data.license_plate || '',
       date: data.date || '',
       driver: data.driver_name || '',
@@ -511,7 +574,7 @@
     document.getElementById('delayLabel').textContent = resetDelay;
     const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
     document.getElementById('profileName').textContent = p.name || 'לא רשום';
-    document.getElementById('profileId').textContent = p.personalId ? `מ.א. ${p.personalId}` : '';
+    document.getElementById('profileId').textContent = p.email || '';
     document.getElementById('settingsOverlay').classList.add('open');
   }
   function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
