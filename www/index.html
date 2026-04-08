@@ -406,14 +406,16 @@
   }
 
   let errorCountdownInterval = null;
-  function startErrorCountdown(sec) {
+  function startErrorCountdown(sec, errMsg) {
     if (errorCountdownInterval) clearInterval(errorCountdownInterval);
     if (resetTimer) clearTimeout(resetTimer);
     let remaining = sec;
     const toast = document.getElementById('saveToast');
+    const errLine = errMsg ? `\n${errMsg}` : '';
     const update = () => {
-      toast.textContent = `❌ שמירה נכשלה — מוחק תמונות בעוד ${remaining}ש'`;
+      toast.textContent = `❌ שמירה נכשלה — מוחק תמונות בעוד ${remaining}ש'${errLine}`;
       toast.classList.add('show');
+      toast.style.whiteSpace = 'pre-line';
     };
     update();
     errorCountdownInterval = setInterval(() => {
@@ -422,6 +424,7 @@
         clearInterval(errorCountdownInterval);
         errorCountdownInterval = null;
         toast.classList.remove('show');
+        toast.style.whiteSpace = '';
         resetUI();
       } else {
         update();
@@ -1189,9 +1192,9 @@
       btn.style.background = '#34a853'; btn.style.color = 'white';
       startResetTimer();
     } catch(e) {
-      btn.textContent = `❌ שגיאה`; btn.disabled = false;
-      showToast('❌ ' + e.message, 6000);
-      startErrorCountdown(20);
+      btn.textContent = `❌ ${e.message}`; btn.disabled = false;
+      btn.style.whiteSpace = 'normal'; btn.style.fontSize = '12px';
+      startErrorCountdown(20, e.message);
     }
   }
 
@@ -1228,11 +1231,11 @@
       showToast(locMsg);
       startResetTimer(); // מאפס אחרי resetDelay שניות מהגדרות
     } catch(e) {
-      btn.textContent = `❌ שגיאה — מנסה שוב?`;
+      btn.textContent = `❌ ${e.message}`;
       btn.style.background = '#c5221f';
+      btn.style.whiteSpace = 'normal'; btn.style.fontSize = '12px';
       btn.disabled = false;
-      showToast('❌ ' + e.message, 6000);
-      startErrorCountdown(20); // מוחק תמונות אחרי 20 שניות
+      startErrorCountdown(20, e.message);
     }
   }
 
