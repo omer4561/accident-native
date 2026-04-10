@@ -51,8 +51,15 @@ jobs:
           echo "version.json: $(cat www/version.json)"
 
       - name: Deploy www/ to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./www
-          force_orphan: true
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git worktree add /tmp/gh-pages gh-pages 2>/dev/null || (git worktree add /tmp/gh-pages --orphan && cd /tmp/gh-pages && git checkout --orphan gh-pages && git rm -rf . 2>/dev/null; true)
+          rsync -av --delete www/ /tmp/gh-pages/
+          cd /tmp/gh-pages
+          touch .nojekyll
+          git add -A
+          git diff --cached --quiet || git commit -m "deploy: $(date -u +'%Y-%m-%d %H:%M:%S') [skip ci]"
+          git push origin gh-pages --force
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
