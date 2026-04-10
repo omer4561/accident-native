@@ -52,9 +52,11 @@ jobs:
           fi
           echo "version.json: $(cat www/version.json)"
 
-      - name: Deploy www/ to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./www
-          force_orphan: true
+          path: ./www
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
