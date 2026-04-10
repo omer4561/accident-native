@@ -264,9 +264,22 @@
     </div>
     <div id="profileSection" style="margin-bottom:16px;padding:12px;background:#e8f0fe;border-radius:10px;">
       <div style="font-size:12px;color:#666;margin-bottom:4px">👤 המשתמש שלך</div>
-      <div id="profileName" style="font-weight:bold;font-size:15px;color:#1a73e8"></div>
-      <div id="profileId" style="font-size:13px;color:#555;margin-top:2px"></div>
-      <button onclick="editProfile()" style="margin-top:8px;font-size:12px;padding:5px 12px;background:transparent;border:1.5px solid #1a73e8;color:#1a73e8;border-radius:6px;cursor:pointer">ערוך פרטים</button>
+      <!-- תצוגת פרופיל -->
+      <div id="profileView">
+        <div id="profileName" style="font-weight:bold;font-size:15px;color:#1a73e8"></div>
+        <div id="profileId" style="font-size:13px;color:#555;margin-top:2px"></div>
+        <button onclick="editProfile()" style="margin-top:8px;font-size:12px;padding:5px 12px;background:transparent;border:1.5px solid #1a73e8;color:#1a73e8;border-radius:6px;cursor:pointer">ערוך פרטים</button>
+      </div>
+      <!-- טופס עריכה (נסתר כברירת מחדל) -->
+      <div id="profileEditForm" style="display:none">
+        <input id="editName" type="text" placeholder="שם מלא" style="width:100%;padding:8px 10px;margin-bottom:8px;border:1.5px solid #b0c8f8;border-radius:7px;font-size:14px;box-sizing:border-box">
+        <input id="editEmail" type="email" placeholder="מייל" style="width:100%;padding:8px 10px;margin-bottom:8px;border:1.5px solid #b0c8f8;border-radius:7px;font-size:14px;box-sizing:border-box">
+        <input id="editPhone" type="tel" placeholder="טלפון" style="width:100%;padding:8px 10px;margin-bottom:10px;border:1.5px solid #b0c8f8;border-radius:7px;font-size:14px;box-sizing:border-box">
+        <div style="display:flex;gap:8px">
+          <button onclick="saveEditProfile()" style="flex:1;padding:8px;background:#1a73e8;color:#fff;border:none;border-radius:7px;font-size:13px;cursor:pointer;font-weight:bold">שמור</button>
+          <button onclick="cancelEditProfile()" style="flex:1;padding:8px;background:transparent;border:1.5px solid #aaa;color:#555;border-radius:7px;font-size:13px;cursor:pointer">ביטול</button>
+        </div>
+      </div>
     </div>
     <div class="settings-row">
       <label>זמן המתנה לאיפוס מסך</label>
@@ -274,29 +287,6 @@
       <div class="settings-val"><span id="delayLabel">10</span> שניות</div>
     </div>
     <button class="settings-save" onclick="saveSettings()">שמור</button>
-  </div>
-</div>
-
-<!-- Edit Profile Modal -->
-<div id="editProfileOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:11000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:16px;padding:28px 24px;width:min(92vw,360px);box-shadow:0 8px 32px rgba(0,0,0,0.25)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <div style="font-weight:bold;font-size:17px;color:#1a73e8">✏️ עריכת פרטים</div>
-      <button onclick="closeEditProfile()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#555">✕</button>
-    </div>
-    <div style="margin-bottom:14px">
-      <label style="font-size:13px;color:#555;display:block;margin-bottom:4px">שם מלא</label>
-      <input id="editName" type="text" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box">
-    </div>
-    <div style="margin-bottom:14px">
-      <label style="font-size:13px;color:#555;display:block;margin-bottom:4px">מייל</label>
-      <input id="editEmail" type="email" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box">
-    </div>
-    <div style="margin-bottom:20px">
-      <label style="font-size:13px;color:#555;display:block;margin-bottom:4px">טלפון</label>
-      <input id="editPhone" type="tel" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box">
-    </div>
-    <button onclick="saveEditProfile()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:bold">שמור שינויים</button>
   </div>
 </div>
 
@@ -615,12 +605,13 @@
       document.getElementById('editPhone').value = contact;
       document.getElementById('editEmail').value = '';
     }
-    closeSettings();
-    document.getElementById('editProfileOverlay').style.display = 'flex';
+    document.getElementById('profileView').style.display = 'none';
+    document.getElementById('profileEditForm').style.display = 'block';
   }
 
-  function closeEditProfile() {
-    document.getElementById('editProfileOverlay').style.display = 'none';
+  function cancelEditProfile() {
+    document.getElementById('profileView').style.display = 'block';
+    document.getElementById('profileEditForm').style.display = 'none';
   }
 
   function saveEditProfile() {
@@ -635,7 +626,7 @@
     hfCommit(`users/${userId}.json`, JSON.stringify(updated)).catch(() => {});
     document.getElementById('profileName').textContent = name;
     document.getElementById('profileId').textContent = contact;
-    closeEditProfile();
+    cancelEditProfile();
     showToast('✅ פרטים עודכנו');
   }
 
