@@ -1301,7 +1301,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
         // Pro + thinking: temperature חייב להיות 1, תקציב חשיבה 8192 טוקן
         const genConfig = isPro
           ? { temperature: 1, max_output_tokens: 8192, thinking_config: { thinking_budget: 8192 } }
-          : { temperature: 0, max_output_tokens: 1024 };
+          : { temperature: 0, max_output_tokens: 1024, top_p: 1, top_k: 32 };
         if (useSchema) {
           genConfig.response_mime_type = 'application/json';
           genConfig.response_schema = _GEMINI_SCHEMA;
@@ -1455,11 +1455,12 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
 
   async function analyzeWithGemini(file, onProg) {
     onProg?.(10, '🤖 שולח ל-Gemini...');
-    const base64 = await fileToBase64(file);
-    const mime = file.type || 'image/jpeg';
+    // דחיסה ל-2500px / 95% איכות — רזולוציה גבוהה לדיוק מקסימלי בקריאת טקסט
+    const compressed = await compressForUpload(file, 2500, 0.95);
+    const base64 = await fileToBase64(compressed);
     return _callGemini([
       { text: _GEMINI_PROMPT },
-      { inline_data: { mime_type: mime, data: base64 } }
+      { inline_data: { mime_type: 'image/jpeg', data: base64 } }
     ], onProg);
   }
 
@@ -1467,8 +1468,9 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     onProg?.(10, '🤖 שולח ל-Gemini (כל העמודים)...');
     const parts = [{ text: _GEMINI_PROMPT }];
     for (const file of files) {
-      const base64 = await fileToBase64(file);
-      parts.push({ inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } });
+      const compressed = await compressForUpload(file, 2500, 0.95);
+      const base64 = await fileToBase64(compressed);
+      parts.push({ inline_data: { mime_type: 'image/jpeg', data: base64 } });
     }
     return _callGemini(parts, onProg);
   }
