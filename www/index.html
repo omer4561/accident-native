@@ -1241,30 +1241,23 @@
     required: ["date_raw", "license_plate", "driver_name"]
   };
 
-  // פרומפט — Gemini מעתיק מה שהוא רואה, לא מפרמט
-  const _GEMINI_PROMPT = `אתה מומחה לקריאת טפסי דוחות תאונה צבאיים ישראלים (33.1106).
+  // פרומפט ישיר — ללא chain-of-thought, structured output מטפל בJSON
+  const _GEMINI_PROMPT = `טופס דוח תאונה צבאי ישראלי 33.1106. חלץ את שלושת השדות:
 
-תהליך:
-1. קרא בקול את כל הטקסט שאתה רואה בתמונה (מודפס וכתב יד, כל שורה).
-2. מתוך הטקסט שקראת, זהה:
-   - תאריך האירוע (ליד "תאריך" / "ב-" / "ביום" — לא תאריך אישור/טיפול)
-   - לוחית רישוי (ליד "לוחית" / "מספר רכב" / "רישוי" — 7-8 ספרות)
-   - שם הנהג (ליד "שם הנהג" / "נהג" / "מצהיר" / "שם:" — שם פרטי + משפחה)
-3. בסוף כתוב שורה אחת של JSON:
-   RESULT: {"date_raw":"...","license_plate":"...","driver_name":"..."}
+date_raw: העתק את תאריך **האירוע** בדיוק כפי שכתוב (ספרות + מפרידים, למשל "07.11.24" או "7/11/2024"). חפש ליד: "תאריך", "ב-", "ביום". לא תאריך אישור/טיפול/חתימה.
 
-חוקים:
-• date_raw — העתק את התאריך **בדיוק כפי שכתוב בטופס** (ספרות ומפרידים בלבד, למשל: "07.11.24" או "7/11/2024" או "071124"). אל תפרמט ואל תשנה — רק העתק.
-• לוחית אזרחית — עם מקפים (123-45-678), צבאית — ספרות בלבד (1234567)
-• driver_name — שם **הנהג בלבד** שנהג ברכב המדווח. בטופס 33.1106 שם הנהג מופיע בשדה "שם הנהג" / "נהג" / "מצהיר". אל תחזיר שמות של מעורבים אחרים, עדים, או נפגעים — גם אם שמותיהם מופיעים יותר פעמים.
-• שדה לא נמצא — null`;
+license_plate: לוחית הרכב המדווח. חפש ליד: "לוחית", "מספר רכב", "רישוי". אזרחית: 123-45-678. צבאית: 1234567.
+
+driver_name: שם **הנהג** שנהג ברכב — מהשדה "שם הנהג"/"נהג"/"מצהיר" בלבד. לא שמות מעורבים/עדים/נפגעים אחרים.
+
+שדה לא נמצא = null.`;
 
   function _makeRetryPrompt(missing) {
-    const lines = ['בדוק שוב. לא הצלחת לזהות:'];
-    if (missing.includes('date')) lines.push('• תאריך — חפש כל רצף ספרות עם נקודות/קווים/רווחים. גם חלקי.');
-    if (missing.includes('license_plate')) lines.push('• לוחית — חפש 6-8 ספרות רצופות בכל מקום.');
-    if (missing.includes('driver_name')) lines.push('• שם — חפש כל שם עברי, גם חלקי, גם קשה לקריאה.');
-    lines.push('כתוב RESULT: {"date":...,"license_plate":...,"driver_name":...}');
+    const lines = ['בדוק שוב בכל הטופס. לא נמצאו:'];
+    if (missing.includes('date')) lines.push('• date_raw — כל רצף ספרות עם נקודות/קווים/רווחים. העתק כמו שכתוב.');
+    if (missing.includes('license_plate')) lines.push('• license_plate — 6-8 ספרות רצופות בכל מקום.');
+    if (missing.includes('driver_name')) lines.push('• driver_name — שם עברי מהשדה "שם הנהג". גם חלקי או קשה לקריאה.');
+    lines.push('שדה לא נמצא = null.');
     return lines.join('\n');
   }
 
@@ -1335,80 +1328,29 @@
   }
 
   async function _callGemini(parts, onProg) {
-    onProg?.(20, '🤖 Gemini קורא את הטופס...');
-    // קריאה אחת — Gemini חושב בקול ומחזיר RESULT: {...} בסוף
-    const text = await (async () => {
-      let lastErr;
-      for (const model of _GEMINI_MODELS) {
-        try {
-          const resp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts }], generation_config: { temperature: 0, max_output_tokens: 1500 } })
-            }
-          );
-          if (resp.status === 429 || resp.status === 503 || resp.status === 500) {
-            lastErr = new Error(`${model} ${resp.status}`); continue;
-          }
-          if (!resp.ok) { const t = await resp.text(); throw new Error(`Gemini ${resp.status}: ${t.slice(0,100)}`); }
-          const json = await resp.json();
-          return (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-        } catch(e) {
-          lastErr = e;
-          if (!e.message.match(/503|429|500/)) throw e;
-        }
-      }
-      throw lastErr || new Error('Gemini לא זמין');
-    })();
-
-    onProg?.(75, '🤖 מחלץ פרטים...');
-
-    // חפש RESULT: {...} בסוף התשובה, או כל JSON בתוכה
-    const resultMatch = text.match(/RESULT:\s*(\{[\s\S]*?\})/i);
-    const jsonMatch   = resultMatch ? resultMatch[1] : (text.match(/\{[\s\S]*?\}/) || [])[0];
-    if (!jsonMatch) throw new Error('Gemini: לא נמצא JSON בתשובה');
+    onProg?.(30, '🤖 Gemini מנתח...');
+    // קריאה ראשית עם structured output
     let raw;
-    try { raw = JSON.parse(jsonMatch); } catch(e) { throw new Error('Gemini: JSON לא תקין'); }
-
+    try {
+      raw = await _callGeminiRaw(parts, true);
+    } catch(e) {
+      // fallback ללא schema
+      raw = await _callGeminiRaw(parts, false);
+    }
     const result = _normalizeResult(raw);
-    onProg?.(88, '🤖 בודק שדות חסרים...');
+    onProg?.(80, '🤖 בודק שדות חסרים...');
 
-    // retry ממוקד אם יש שדות חסרים
-    const missing = ['date','license_plate','driver_name'].filter(k => !result[k]);
-    if (missing.length) {
+    // retry ממוקד על שדות חסרים
+    const imgParts = parts.filter(p => p.inline_data);
+    const missing  = ['date','license_plate','driver_name'].filter(k => !result[k]);
+    if (missing.length && imgParts.length) {
       try {
-        const imgParts = parts.filter(p => p.inline_data);
-        const r2text = await (async () => {
-          for (const model of _GEMINI_MODELS) {
-            try {
-              const resp = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-                {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ contents: [{ parts: [{ text: _makeRetryPrompt(missing) }, ...imgParts] }], generation_config: { temperature: 0, max_output_tokens: 300 } })
-                }
-              );
-              if (resp.status === 429 || resp.status === 503 || resp.status === 500) continue;
-              if (!resp.ok) break;
-              const j = await resp.json();
-              return (j.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-            } catch(e) { if (!e.message.match(/503|429|500/)) break; }
-          }
-          return '';
-        })();
-        if (r2text) {
-          const rm = r2text.match(/RESULT:\s*(\{[\s\S]*?\})/i) || [, r2text.match(/\{[\s\S]*?\}/)?.[0]];
-          if (rm[1]) {
-            try {
-              const r2 = _normalizeResult(JSON.parse(rm[1]));
-              result.date          = result.date          || r2.date;
-              result.license_plate = result.license_plate || r2.license_plate;
-              result.driver_name   = result.driver_name   || r2.driver_name;
-            } catch(e) {}
-          }
-        }
+        const r2 = _normalizeResult(await _callGeminiRaw(
+          [{ text: _makeRetryPrompt(missing) }, ...imgParts], true
+        ));
+        result.date          = result.date          || r2.date;
+        result.license_plate = result.license_plate || r2.license_plate;
+        result.driver_name   = result.driver_name   || r2.driver_name;
       } catch(e) {}
     }
 
