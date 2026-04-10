@@ -1891,7 +1891,7 @@
   let _adminReports = [], _adminUsers = {};
 
   function openAdminPanel() {
-    document.getElementById('sidePanel').classList.remove('open');
+    document.getElementById('historyOverlay').classList.remove('open');
     const panel = document.getElementById('adminPanel');
     panel.style.display = 'flex';
     if (localStorage.getItem(ADMIN_AUTH_KEY) !== '1') {
