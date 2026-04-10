@@ -1229,32 +1229,47 @@
   }
 
   // ===================== GEMINI VISION AI =====================
-  async function analyzeWithGemini(file, onProg) {
-    onProg?.(10, '🤖 שולח ל-Gemini...');
-    const base64 = await fileToBase64(file);
-    const mime = file.type || 'image/jpeg';
-    const prompt = `זהו טופס דוח תאונה צבאי ישראלי 33.1106.
-חלץ את הנתונים הבאים ותחזיר JSON בלבד (ללא מרכאות חיצוניות, ללא הסבר):
+  const _GEMINI_PROMPT = `זהו טופס דוח תאונה צבאי ישראלי 33.1106 (עמוד 1 או 2, לפעמים שניהם).
+החזר JSON בלבד, ללא שום טקסט נוסף, ללא מרכאות חיצוניות:
 {"date":"DD.MM.YY","license_plate":"XXX-XX-XXX","driver_name":"שם"}
-אם שדה לא קיים — null. פורמט תאריך: DD.MM.YY בלבד (לדוגמה: 28.4.25).`;
 
+חוקים מחייבים לכל שדה:
+
+DATE — תאריך האירוע:
+• חפש בכל הטופס: פינה שמאלית-עליונה, שורת "תאריך", "ב-", "ביום", "תאריך התאונה"
+• פורמטים אפשריים: DD.MM.YY / DD.MM.YYYY / DD/MM/YY / DD/MM/YYYY / DD\\MM\\YY / DD-MM-YY / DD MM YY / D.M.YY / DDMMYY
+• OCR עלול לבלבל: l/I במקום /, O/o במקום 0, רווח במקום מפריד, נקודה נוספת בסוף
+• החזר תמיד בפורמט: DD.MM.YY (שנה 2 ספרות בלבד, לדוגמה: 28.04.25)
+• אם יש כמה תאריכים — קח תאריך התאונה, לא תאריך הטיפול/אישור/חתימה
+
+LICENSE_PLATE — לוחית רישוי:
+• אזרחית: 7-8 ספרות עם מקפים כגון 123-45-678 או 12-345-67
+• צבאית: 7-8 ספרות רצופות ללא מקפים כגון 1234567 או 12345678
+• OCR עלול לפספס מקפים — 7-8 ספרות רצופות = לוחית
+• חפש ליד: "לוחית", "מספר רכב", "מס' רישום", "רישוי", "כלי הרכב"
+• אם אין — null
+
+DRIVER_NAME — שם הנהג:
+• שם פרטי + משפחה בעברית
+• חפש ליד: "שם הנהג", "שם מלא", "נהג", "שם:", "מצהיר", "בעל הרכב"
+• כתב יד קשה? — נסה להסיק את השם לפי אותיות שנראות
+• אם אין — null`;
+
+  async function _callGemini(parts, onProg) {
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [
-            { text: prompt },
-            { inline_data: { mime_type: mime, data: base64 } }
-          ]}],
-          generation_config: { temperature: 0, max_output_tokens: 150 }
+          contents: [{ parts }],
+          generation_config: { temperature: 0, max_output_tokens: 300 }
         })
       }
     );
     if (!resp.ok) {
       const t = await resp.text();
-      throw new Error(`Gemini ${resp.status}: ${t.slice(0,80)}`);
+      throw new Error(`Gemini ${resp.status}: ${t.slice(0,120)}`);
     }
     const json = await resp.json();
     const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
@@ -1267,6 +1282,26 @@
       license_plate: data.license_plate || null,
       driver_name: data.driver_name || null
     };
+  }
+
+  async function analyzeWithGemini(file, onProg) {
+    onProg?.(10, '🤖 שולח ל-Gemini...');
+    const base64 = await fileToBase64(file);
+    const mime = file.type || 'image/jpeg';
+    return _callGemini([
+      { text: _GEMINI_PROMPT },
+      { inline_data: { mime_type: mime, data: base64 } }
+    ], onProg);
+  }
+
+  async function analyzeWithGeminiMulti(files, onProg) {
+    onProg?.(10, '🤖 שולח ל-Gemini (כל העמודים)...');
+    const parts = [{ text: _GEMINI_PROMPT }];
+    for (const file of files) {
+      const base64 = await fileToBase64(file);
+      parts.push({ inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } });
+    }
+    return _callGemini(parts, onProg);
   }
 
   // ===================== OCR ENGINE (מובנה, ללא הורדות) =====================
@@ -1407,12 +1442,19 @@
   // ===================== PARSE FIELDS =====================
   function extractDate(text) {
     const curYear = new Date().getFullYear();
-    // sep1: סימני פרידה נפוצים (כולל תווי OCR שגויים l/I במקום /)
-    // sep2: רווחים בלבד — fallback כשOCR לא מזהה את הסלאש
+    // מפרידים: כולל כפולים (//, .., --), תווי OCR שגויים (l/I), רווחים
     const seps = [
-      '[\\s]*[/\\.\\-|\\\\lI][\\s]*',
+      '[\\s]*[/\\.\\-|\\\\lI:]{1,2}[\\s]*',
       '[\\s]+'
     ];
+
+    function _valid(dd, mm, yyyy) {
+      return mm>=1 && mm<=12 && dd>=1 && dd<=31;
+    }
+    function _fmt(dd, mm, yyyy) {
+      return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
+    }
+
     for (const sep of seps) {
       const patterns = [
         { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{4})`),        type: 'dmy4' },
@@ -1426,17 +1468,27 @@
         if (type === 'dmy4') { dd=+m[1]; mm=+m[2]; yyyy=+m[3]; }
         else if (type === 'ymd4') { yyyy=+m[1]; mm=+m[2]; dd=+m[3]; }
         else if (type === 'dmy2') { dd=+m[1]; mm=+m[2]; yyyy=2000+(+m[3]); }
-        if (mm>=1&&mm<=12&&dd>=1&&dd<=31) {
-          return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
-        }
+        if (_valid(dd, mm, yyyy)) return _fmt(dd, mm, yyyy);
       }
     }
+
+    // ספרות צמודות ללא מפריד: DDMMYYYY (8 ספרות) או DDMMYY (6 ספרות)
+    const p8 = text.match(/(?<!\d)(\d{2})(\d{2})(\d{4})(?!\d)/);
+    if (p8) {
+      const dd=+p8[1], mm=+p8[2], yyyy=+p8[3];
+      if (_valid(dd,mm,yyyy) && yyyy>=2000 && yyyy<=2099) return _fmt(dd,mm,yyyy);
+    }
+    const p6 = text.match(/(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)/);
+    if (p6) {
+      const dd=+p6[1], mm=+p6[2], yyyy=2000+(+p6[3]);
+      if (_valid(dd,mm,yyyy)) return _fmt(dd,mm,yyyy);
+    }
+
     // last resort: DD/MM ללא שנה (למשל 28.3 או 28.3.)
-    const dm = text.match(new RegExp(`(\\d{1,2})[\\s]*[/\\.\\-|\\\\lI][\\s]*(\\d{1,2})(?!\\d)`));
+    const dm = text.match(/(\\d{1,2})[\\s]*[/\\.\\-|\\\\lI][\\s]*(\\d{1,2})(?!\\d)/);
     if (dm) {
       const dd=+dm[1], mm=+dm[2];
-      if (mm>=1&&mm<=12&&dd>=1&&dd<=31)
-        return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${curYear}`;
+      if (_valid(dd, mm, curYear)) return _fmt(dd, mm, curYear);
     }
     return null;
   }
@@ -1786,11 +1838,25 @@
 
     const results = [], errors = [];
 
+    // אם יש Gemini ו-2+ עמודים — שלח הכל בקריאה אחת לדיוק מקסימלי
+    let _multiGeminiResult = null;
+    if (geminiKey && selectedFiles.length > 1) {
+      try {
+        selectedFiles.forEach((_, i) => setProgress(i, 10, '🤖 שולח ל-Gemini (כל העמודים)...'));
+        _multiGeminiResult = await analyzeWithGeminiMulti(selectedFiles, () => {});
+        selectedFiles.forEach((_, i) => setProgress(i, 100, '✅ Gemini AI (רב-עמודי)'));
+      } catch(e) {
+        _multiGeminiResult = null; // נפול לעיבוד בנפרד
+      }
+    }
+
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
       try {
         let data;
-        if (geminiKey) {
+        if (_multiGeminiResult) {
+          data = _multiGeminiResult;
+        } else if (geminiKey) {
           try {
             data = await analyzeWithGemini(file, (pct, msg) => setProgress(i, pct, msg));
             setProgress(i, 100, '✅ Gemini AI');
