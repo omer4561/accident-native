@@ -1298,7 +1298,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     let lastErr;
     for (const model of _GEMINI_MODELS) {
       try {
-        const genConfig = { temperature: 0, topP: 1, topK: 32, maxOutputTokens: 1024 };
+        const genConfig = { temperature: 1, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 8192 } };
         if (useSchema) {
           genConfig.responseMimeType = 'application/json';
           genConfig.responseSchema = _GEMINI_SCHEMA;
