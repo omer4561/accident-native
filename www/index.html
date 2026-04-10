@@ -1297,38 +1297,48 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   async function _callGeminiRaw(parts, useSchema) {
     let lastErr;
     for (const model of _GEMINI_MODELS) {
-      try {
-        const genConfig = { temperature: 0, topP: 1, topK: 32, maxOutputTokens: 1024 };
-        if (useSchema) {
-          genConfig.responseMimeType = 'application/json';
-          genConfig.responseSchema = _GEMINI_SCHEMA;
-        }
-        const resp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: 'אתה קורא מסמכים. כלל אחד בלבד: אם אינך רואה ערך כתוב בבירור בטופס — החזר null. אסור בהחלט להמציא, לנחש, לדמיין, או להסיק ערכים. עדיף null מאשר ערך שגוי.' }] },
-              contents: [{ parts }],
-              generationConfig: genConfig
-            })
+      // pro מוגבל ל-2 RPM בחינם — נסה עד 3 פעמים עם המתנה לפני שעוברים ל-flash
+      const maxAttempts = model.includes('pro') ? 3 : 1;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 10000)); // המתן 10 שניות לפני retry
+        try {
+          const genConfig = { temperature: 0, topP: 1, topK: 32, maxOutputTokens: 1024 };
+          if (useSchema) {
+            genConfig.responseMimeType = 'application/json';
+            genConfig.responseSchema = _GEMINI_SCHEMA;
           }
-        );
-        if (!resp.ok) {
-          const t = await resp.text();
-          lastErr = new Error(`Gemini ${model} ${resp.status}: ${t.slice(0, 100)}`);
-          continue;
+          const resp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: 'אתה קורא מסמכים. כלל אחד בלבד: אם אינך רואה ערך כתוב בבירור בטופס — החזר null. אסור בהחלט להמציא, לנחש, לדמיין, או להסיק ערכים. עדיף null מאשר ערך שגוי.' }] },
+                contents: [{ parts }],
+                generationConfig: genConfig
+              })
+            }
+          );
+          if (resp.status === 429) {
+            lastErr = new Error(`Gemini ${model} quota`);
+            continue; // retry אותו מודל
+          }
+          if (!resp.ok) {
+            const t = await resp.text();
+            lastErr = new Error(`Gemini ${model} ${resp.status}: ${t.slice(0, 100)}`);
+            break; // שגיאה אחרת — עבור למודל הבא
+          }
+          const json = await resp.json();
+          const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+          try { return JSON.parse(text); } catch(e) {}
+          const m = text.match(/\{[\s\S]*?\}/);
+          if (m) return JSON.parse(m[0]);
+          lastErr = new Error('Gemini: תגובה לא תקינה — ' + text.slice(0, 80));
+          break;
+        } catch(e) {
+          lastErr = e;
+          break;
         }
-        const json = await resp.json();
-        const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-        try { return JSON.parse(text); } catch(e) {}
-        const m = text.match(/\{[\s\S]*?\}/);
-        if (m) return JSON.parse(m[0]);
-        throw new Error('Gemini: תגובה לא תקינה — ' + text.slice(0, 80));
-      } catch(e) {
-        lastErr = e;
-        continue;
       }
     }
     throw lastErr || new Error('כל דגמי Gemini אינם זמינים כרגע');
@@ -1345,14 +1355,15 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     return null;
   }
 
-  // וולידציה: שם חייב להכיל לפחות 2 אותיות עברית ולא להיות רובו ספרות
+  // וולידציה: שם חייב להיות שתי מילים עבריות לפחות (שם פרטי + משפחה)
   function _validateName(raw) {
     if (!raw || raw === 'null') return null;
     const s = String(raw).trim();
-    const hebrewLetters = (s.match(/[\u05D0-\u05EA]/g) || []).length;
     const digits = (s.match(/\d/g) || []).length;
-    if (hebrewLetters < 2) return null;       // אין מספיק עברית — דחה
-    if (digits > s.length / 3) return null;  // רובו ספרות — כנראה לא שם
+    if (digits > s.length / 3) return null;  // רובו ספרות — לא שם
+    // פצל למילים — כל מילה חייבת להכיל לפחות 2 אותיות עברית
+    const words = s.split(/\s+/).filter(w => (w.match(/[\u05D0-\u05EA]/g) || []).length >= 2);
+    if (words.length < 2) return null; // פחות משתי מילים עבריות — כנראה כותרת/תפקיד ולא שם
     return s;
   }
 
