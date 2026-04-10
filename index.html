@@ -1,0 +1,1851 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>דוחות תאונה</title>
+  <script src="ocr-engine.js"></script>
+  <script>const APP_TS = 1775813617; const APP_BUILD = 0; const GEMINI_KEY = ''; const HF_TOKEN = '__HF_TOKEN__';
+    const TG_TOKEN = ''; const TG_CHANNEL = '';
+    const EMAILJS_SERVICE = 'service_bjqkxoi'; const EMAILJS_TEMPLATE = 'template_2omo9fg'; const EMAILJS_KEY = 'ntQMdcuRr-it9LXmw';
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; direction: rtl; }
+
+    header {
+      background: #1a73e8; color: white;
+      padding: 0 16px;
+      height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    header .title { font-size: 18px; font-weight: bold; }
+    .menu-btn {
+      background: none; border: none; color: white;
+      font-size: 22px; cursor: pointer; padding: 8px;
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    .menu-btn span { display: block; width: 22px; height: 2px; background: white; border-radius: 2px; }
+
+    .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+
+    /* ---- History overlay ---- */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 200;
+    }
+    .overlay.open { display: flex; }
+    .side-panel {
+      background: white; width: min(360px, 92vw);
+      height: 100%; overflow-y: auto;
+      display: flex; flex-direction: column;
+      animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    .panel-header {
+      background: #1a73e8; color: white;
+      padding: 16px; font-size: 16px; font-weight: bold;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .panel-tabs {
+      display: flex; border-bottom: 2px solid #eee; flex-shrink: 0;
+    }
+    .panel-tab {
+      flex: 1; padding: 12px; text-align: center; font-size: 13px;
+      font-weight: bold; cursor: pointer; color: #888; border: none; background: none;
+    }
+    .panel-tab.active { color: #1a73e8; border-bottom: 2px solid #1a73e8; margin-bottom: -2px; }
+    .panel-content { padding: 12px; flex: 1; }
+
+    .report-item {
+      background: #f8f9fa; border-radius: 10px; padding: 12px;
+      margin-bottom: 10px; border-right: 4px solid #1a73e8;
+    }
+    .report-item.trashed { border-color: #e53935; opacity: 0.8; }
+    .report-item .ri-plate { font-weight: bold; color: #1a73e8; font-size: 15px; margin-bottom: 4px; }
+    .report-item .ri-meta { font-size: 12px; color: #666; margin-bottom: 8px; }
+    .report-item .ri-files { font-size: 11px; color: #888; margin-bottom: 8px; }
+    .ri-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ri-btn {
+      padding: 5px 10px; border: none; border-radius: 6px;
+      font-size: 12px; font-weight: bold; cursor: pointer;
+    }
+    .ri-btn-del { background: #fce8e6; color: #c5221f; }
+    .ri-btn-restore { background: #e6f4ea; color: #1e8e3e; }
+    .ri-btn-perm { background: #c5221f; color: white; }
+    .ri-btn-open { background: #e8f0fe; color: #1a73e8; }
+    .empty-msg { text-align: center; color: #aaa; padding: 32px 16px; font-size: 14px; }
+
+    /* ---- Folder tree ---- */
+    .folder-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 12px 10px; background: #e8f0fe;
+      border-radius: 10px; margin-bottom: 6px;
+      cursor: pointer; font-weight: bold; font-size: 14px; color: #1a73e8;
+      user-select: none;
+    }
+    .folder-row:active { background: #c5d8fd; }
+    .folder-name { flex: 1; }
+    .folder-count { font-size: 11px; background: #1a73e8; color: white; border-radius: 12px; padding: 2px 8px; }
+    .folder-arrow { font-size: 11px; color: #888; }
+    .folder-items { padding: 0 0 6px 8px; }
+
+    /* ---- Upload ---- */
+    .upload-area {
+      background: white; border: 2px dashed #1a73e8;
+      border-radius: 12px; padding: 28px 20px;
+      text-align: center; cursor: pointer;
+      margin-bottom: 12px; transition: background 0.2s; user-select: none;
+    }
+    .upload-area:active { background: #e8f0fe; }
+    .upload-area.has-files { border-color: #34a853; background: #f0faf3; }
+    .upload-area .icon { font-size: 44px; margin-bottom: 6px; }
+    .upload-area .label { font-size: 16px; font-weight: bold; color: #1a73e8; }
+    .upload-area.has-files .label { color: #1e8e3e; }
+    .upload-area .hint { font-size: 13px; color: #666; margin-top: 4px; }
+    .count-badge {
+      display: inline-block; background: #34a853; color: white;
+      border-radius: 20px; padding: 4px 14px;
+      font-size: 14px; font-weight: bold; margin-top: 8px;
+    }
+    .thumbs-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .thumb-item { width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 2px solid #ddd; flex-shrink: 0; }
+    .thumb-item img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb-more {
+      width: 64px; height: 64px; border-radius: 8px;
+      background: #e8f0fe; border: 2px solid #1a73e8;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: bold; color: #1a73e8; flex-shrink: 0;
+    }
+    #fileInput { display: none; }
+
+    .btn {
+      display: block; width: 100%; padding: 14px;
+      border: none; border-radius: 10px;
+      font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 12px;
+    }
+    .btn-primary { background: #1a73e8; color: white; }
+    .btn-primary:disabled { background: #aaa; cursor: default; }
+
+    .section { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; display: none; }
+    .section.visible { display: block; }
+    .section-title { font-size: 14px; font-weight: bold; color: #555; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+
+    .file-progress { margin-bottom: 10px; }
+    .file-name { font-size: 13px; color: #333; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .progress-bar-bg { background: #e0e0e0; border-radius: 6px; height: 8px; overflow: hidden; }
+    .progress-bar { background: #1a73e8; height: 100%; border-radius: 6px; transition: width 0.2s; width: 0%; }
+    .progress-status { font-size: 11px; color: #888; margin-top: 2px; }
+
+    .group-card { background: #f8f9fa; border-radius: 10px; padding: 14px; margin-bottom: 12px; border-right: 4px solid #1a73e8; }
+    .group-plate { font-size: 18px; font-weight: bold; color: #1a73e8; margin-bottom: 4px; }
+    .group-meta { font-size: 13px; color: #555; margin-bottom: 10px; }
+    .group-meta span { margin-left: 12px; }
+    .pages-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .page-btn {
+      flex: 1; min-width: 100px; padding: 10px;
+      background: #e8f0fe; color: #1a73e8;
+      border: none; border-radius: 8px; font-size: 13px;
+      cursor: pointer; text-align: center; font-weight: bold;
+    }
+    .page-btn-all {
+      flex: 2; min-width: 140px; padding: 10px;
+      background: #1a73e8; color: white;
+      border: none; border-radius: 8px; font-size: 13px;
+      cursor: pointer; text-align: center; font-weight: bold;
+    }
+    .error-tag { background: #fce8e6; color: #c5221f; border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 8px; }
+    .summary-bar { background: #e6f4ea; border-radius: 10px; padding: 12px 16px; text-align: center; font-size: 15px; font-weight: bold; color: #1e8e3e; margin-bottom: 12px; }
+    .worker-status { font-size: 12px; color: #aaa; text-align: center; margin-bottom: 8px; }
+    .worker-status.ready { color: #34a853; }
+
+    /* ---- Toast ---- */
+    #saveToast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #222; color: #fff; border-radius: 10px;
+      padding: 10px 18px; font-size: 13px; z-index: 999;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s;
+      max-width: 90vw; text-align: center; line-height: 1.5;
+    }
+    #saveToast.show { opacity: 1; }
+
+    /* ---- Settings overlay ---- */
+    .settings-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 300;
+      align-items: center; justify-content: center;
+    }
+    .settings-overlay.open { display: flex; }
+    .settings-box {
+      background: white; border-radius: 16px;
+      width: min(340px, 90vw); padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .settings-title {
+      font-size: 17px; font-weight: bold; margin-bottom: 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .settings-row { margin-bottom: 20px; }
+    .settings-row label { display: block; font-size: 14px; color: #555; margin-bottom: 8px; }
+    .settings-row input[type=range] { width: 100%; accent-color: #1a73e8; }
+    .settings-val { font-size: 22px; font-weight: bold; color: #1a73e8; text-align: center; margin-top: 6px; }
+    .settings-save {
+      width: 100%; padding: 12px;
+      background: #1a73e8; color: white;
+      border: none; border-radius: 10px; font-size: 15px;
+      cursor: pointer; font-weight: bold;
+    }
+
+    /* ---- Editable fields in results ---- */
+    .edit-label { font-size: 11px; color: #888; margin-bottom: 3px; }
+    .edit-field {
+      width: 100%; padding: 7px 10px;
+      border: 1px solid #ddd; border-radius: 7px;
+      font-size: 14px; direction: rtl; background: #fff;
+    }
+    .edit-field:focus { outline: none; border-color: #1a73e8; }
+    .edit-row { margin-bottom: 8px; }
+    .edit-grid { display: flex; gap: 8px; margin-bottom: 8px; }
+    .edit-grid > div { flex: 1; min-width: 0; }
+
+    /* ---- Camera button ---- */
+    .btn-camera { background: #34a853; color: white; margin-bottom: 8px; }
+
+    /* ---- History search ---- */
+    .history-search {
+      padding: 10px 12px; border-bottom: 1px solid #eee; flex-shrink: 0;
+    }
+    .history-search input {
+      width: 100%; padding: 8px 12px;
+      border: 1px solid #ddd; border-radius: 8px;
+      font-size: 14px; direction: rtl;
+    }
+    .history-search input:focus { outline: none; border-color: #1a73e8; }
+
+    /* ---- Export CSV button ---- */
+    .btn-export {
+      width: 100%; padding: 10px; margin-top: 8px;
+      background: #e6f4ea; border: none; border-radius: 10px;
+      font-size: 14px; cursor: pointer; color: #1e8e3e; font-weight: bold;
+    }
+
+    /* ---- Gemini key input ---- */
+    .gemini-input {
+      width: 100%; padding: 10px; border: 1px solid #ddd;
+      border-radius: 8px; font-size: 14px; direction: ltr;
+      margin-bottom: 8px;
+    }
+    .gemini-hint {
+      font-size: 12px; color: #666; line-height: 1.6;
+      background: #f8f9fa; border-radius: 8px; padding: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title">🚗 ארגון דוחות תאונה</div>
+  <button class="menu-btn" onclick="openHistory()" title="היסטוריה">
+    <span></span><span></span><span></span>
+  </button>
+</header>
+
+<!-- Settings overlay -->
+<div class="settings-overlay" id="settingsOverlay" onclick="settingsOverlayClick(event)">
+  <div class="settings-box">
+    <div class="settings-title">
+      ⚙️ הגדרות
+      <button onclick="closeSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#555">✕</button>
+    </div>
+    <div id="profileSection" style="margin-bottom:16px;padding:12px;background:#e8f0fe;border-radius:10px;">
+      <div style="font-size:12px;color:#666;margin-bottom:4px">👤 המשתמש שלך</div>
+      <!-- תצוגת פרופיל -->
+      <div id="profileView">
+        <div id="profileName" style="font-weight:bold;font-size:15px;color:#1a73e8"></div>
+        <div id="profileId" style="font-size:13px;color:#555;margin-top:2px"></div>
+        <button onclick="editProfile()" style="margin-top:8px;font-size:12px;padding:5px 12px;background:transparent;border:1.5px solid #1a73e8;color:#1a73e8;border-radius:6px;cursor:pointer">ערוך פרטים</button>
+      </div>
+      <!-- טופס עריכה (נסתר כברירת מחדל) -->
+      <div id="profileEditForm" style="display:none">
+        <input id="editName" type="text" placeholder="שם מלא" style="width:100%;padding:8px 10px;margin-bottom:8px;border:1.5px solid #b0c8f8;border-radius:7px;font-size:14px;box-sizing:border-box">
+        <input id="editEmail" type="email" placeholder="מייל" style="width:100%;padding:8px 10px;margin-bottom:8px;border:1.5px solid #b0c8f8;border-radius:7px;font-size:14px;box-sizing:border-box">
+        <input id="editPhone" type="tel" placeholder="טלפון" style="width:100%;padding:8px 10px;margin-bottom:10px;border:1.5px solid #b0c8f8;border-radius:7px;font-size:14px;box-sizing:border-box">
+        <div style="display:flex;gap:8px">
+          <button onclick="saveEditProfile()" style="flex:1;padding:8px;background:#1a73e8;color:#fff;border:none;border-radius:7px;font-size:13px;cursor:pointer;font-weight:bold">שמור</button>
+          <button onclick="cancelEditProfile()" style="flex:1;padding:8px;background:transparent;border:1.5px solid #aaa;color:#555;border-radius:7px;font-size:13px;cursor:pointer">ביטול</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-row">
+      <label>זמן המתנה לאיפוס מסך</label>
+      <input type="range" id="delaySlider" min="3" max="60" step="1" oninput="updateDelayLabel(this.value)">
+      <div class="settings-val"><span id="delayLabel">10</span> שניות</div>
+    </div>
+    <button class="settings-save" onclick="saveSettings()">שמור</button>
+  </div>
+</div>
+
+<!-- History side panel -->
+<div class="overlay" id="historyOverlay" onclick="overlayClick(event)">
+  <div class="side-panel">
+    <div class="panel-header">
+      <span>📁 היסטוריה</span>
+      <button onclick="closeHistory()" style="background:none;border:none;color:white;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div class="panel-tabs">
+      <button class="panel-tab active" id="tabFolders" onclick="switchTab('folders')">📁 תיקיות</button>
+      <button class="panel-tab" id="tabTrash" onclick="switchTab('trash')">🗑️ סל מחזור</button>
+    </div>
+    <div class="history-search">
+      <input type="text" id="historySearch" placeholder="🔍 חפש: לוחית, תאריך, שם נהג..." oninput="renderPanel()">
+    </div>
+    <div class="panel-content" id="panelContent"></div>
+    <div style="padding:12px;border-top:1px solid #eee;flex-shrink:0">
+      <button onclick="openSettings()" style="width:100%;padding:10px;background:#f1f3f4;border:none;border-radius:10px;font-size:14px;cursor:pointer;color:#444">⚙️ הגדרות</button>
+      <button onclick="exportCSV()" class="btn-export">📊 ייצא CSV</button>
+      <div id="appVersionLine" style="text-align:center;font-size:11px;color:#aaa;margin-top:8px"></div>
+    </div>
+  </div>
+</div>
+
+<div id="saveToast"></div>
+
+<!-- Image viewer overlay -->
+
+<div id="imgViewer" style="display:none;position:fixed;inset:0;z-index:20000;background:#000;flex-direction:column">
+  <div style="display:flex;align-items:center;padding:10px 16px;background:rgba(0,0,0,0.85);flex-shrink:0;direction:rtl">
+    <button onclick="closeImgViewer()" style="background:#1a73e8;border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;padding:8px 18px;border-radius:20px;white-space:nowrap">← חזרה</button>
+    <span id="imgViewerTitle" style="color:#fff;font-size:14px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 10px"></span>
+  </div>
+  <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center">
+    <img id="imgViewerImg" src="" style="max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom">
+  </div>
+</div>
+<div class="container">
+  <div class="worker-status" id="workerStatus">⏳ מכין מנוע זיהוי...</div>
+
+
+  <div style="display:flex;gap:8px;margin-bottom:8px">
+    <div class="upload-area" id="uploadArea" style="flex:1;margin-bottom:0" onclick="pickFromGallery()">
+      <div class="icon">📁</div>
+      <div class="label" id="uploadLabel">בחר תמונות</div>
+      <div class="hint" style="font-size:11px">כמה תמונות בבת אחת</div>
+      <div id="countBadge"></div>
+    </div>
+    <div class="upload-area" id="cameraArea" style="flex:1;margin-bottom:0;border-color:#34a853" onclick="takePicture()">
+      <div class="icon">📷</div>
+      <div class="label" style="color:#34a853">צלם</div>
+      <div class="hint" style="font-size:11px">פתח מצלמה</div>
+    </div>
+  </div>
+  <div class="thumbs-row" id="thumbsRow"></div>
+  <input type="file" id="fileInput" multiple accept="image/*">
+
+  <button class="btn btn-primary" id="processBtn" disabled onclick="startProcessing()">עבד תמונות</button>
+
+  <div class="section" id="progressSection">
+    <div class="section-title">⏳ עיבוד בתהליך</div>
+    <div id="progressList"></div>
+  </div>
+
+  <div class="section" id="resultsSection">
+    <div class="section-title">✅ תוצאות</div>
+    <div id="summaryBar" class="summary-bar"></div>
+    <div id="resultsList"></div>
+    <div id="errorsList"></div>
+  </div>
+</div>
+
+<!-- עדכון אוטומטי -->
+<div id="updateOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#1a73e8;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:inherit;text-align:center;padding:32px">
+  <div style="font-size:64px;margin-bottom:24px">🔄</div>
+  <div style="font-size:26px;font-weight:700;margin-bottom:12px">עדכון גרסה</div>
+  <div style="font-size:16px;opacity:0.9;margin-bottom:32px">מעדכן אוטומטית…</div>
+  <div style="width:60%;height:6px;background:rgba(255,255,255,0.3);border-radius:3px;overflow:hidden">
+    <div id="updateBar" style="height:100%;width:0;background:#fff;border-radius:3px;transition:width 1.8s ease"></div>
+  </div>
+</div>
+
+<!-- הרשמה — חוסמת את האפליקציה בפתיחה ראשונה -->
+<div id="registrationOverlay" style="display:none;position:fixed;inset:0;background:#1a73e8;z-index:10000;flex-direction:column;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;width:min(92vw,380px);box-shadow:0 8px 32px rgba(0,0,0,0.25)">
+    <div style="text-align:center;font-size:40px;margin-bottom:8px">🪪</div>
+    <h2 style="margin:0 0 6px;text-align:center;font-size:20px;color:#1a73e8">הרשמה לאפליקציה</h2>
+    <p style="margin:0 0 20px;text-align:center;font-size:13px;color:#666">נדרש פעם אחת בלבד</p>
+
+    <!-- שלב 1: שם + בחירת ערוץ -->
+    <div id="regStep1">
+      <div style="margin-bottom:14px">
+        <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">שם מלא *</label>
+        <input id="regName" type="text" placeholder="ישראל ישראלי"
+          style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;box-sizing:border-box;direction:rtl">
+      </div>
+      <!-- טאבים -->
+      <div style="display:flex;border:1.5px solid #1a73e8;border-radius:8px;overflow:hidden;margin-bottom:14px">
+        <button id="tabEmail" onclick="switchRegTab('email')"
+          style="flex:1;padding:10px;border:none;background:#1a73e8;color:#fff;font-size:14px;font-weight:bold;cursor:pointer">
+          📧 מייל
+        </button>
+        <button id="tabPhone" onclick="switchRegTab('phone')"
+          style="flex:1;padding:10px;border:none;background:#fff;color:#1a73e8;font-size:14px;font-weight:bold;cursor:pointer">
+          📱 טלפון
+        </button>
+      </div>
+      <!-- שדה מייל -->
+      <div id="regEmailField" style="margin-bottom:14px">
+        <input id="regEmail" type="email" placeholder="user@example.com"
+          style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box;direction:ltr">
+        <p style="font-size:11px;color:#888;margin-top:4px;margin-bottom:0">הקוד יישלח ישירות למייל שלך</p>
+      </div>
+      <!-- שדה טלפון -->
+      <div id="regPhoneField" style="margin-bottom:14px;display:none">
+        <input id="regPhone" type="tel" placeholder="050-0000000"
+          style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box;direction:ltr">
+        <p style="font-size:11px;color:#888;margin-top:4px;margin-bottom:0">הקוד יישלח למפקד שיעביר אותו אליך</p>
+      </div>
+      <div id="regError1" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px;font-size:14px;margin-bottom:12px;text-align:center"></div>
+      <button id="regSendBtn" onclick="sendOTP()"
+        style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer">
+        שלח קוד →
+      </button>
+    </div>
+
+    <!-- שלב 2: הזנת קוד -->
+    <div id="regStep2" style="display:none">
+      <p id="regSentMsg" style="margin-bottom:16px;font-size:14px;color:#555;text-align:center"></p>
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;font-weight:bold;color:#444;display:block;margin-bottom:4px">קוד 6 ספרות *</label>
+        <input id="regOTP" type="number" placeholder="123456" maxlength="6"
+          style="width:100%;padding:14px;border:1.5px solid #ddd;border-radius:8px;font-size:22px;box-sizing:border-box;direction:ltr;text-align:center;letter-spacing:6px"
+          oninput="if(this.value.length>6)this.value=this.value.slice(0,6)">
+      </div>
+      <div id="regError2" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px;font-size:14px;margin-bottom:12px;text-align:center"></div>
+      <button onclick="verifyOTP()"
+        style="width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;margin-bottom:10px">
+        אמת ואשר הרשמה ←
+      </button>
+      <button onclick="document.getElementById('regStep2').style.display='none';document.getElementById('regStep1').style.display='block'"
+        style="width:100%;padding:10px;background:transparent;border:1.5px solid #ccc;border-radius:10px;font-size:14px;cursor:pointer;color:#666">
+        ← חזרה
+      </button>
+      <p style="margin-top:10px;font-size:12px;color:#aaa;text-align:center">הקוד בתוקף ל-10 דקות</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===================== LIVE BOOT — redirect APK to GitHub Pages =====================
+  (async function liveBoot() {
+    const PAGES = 'https://omer4561.github.io/accident-native/';
+    if (!location.href.startsWith('capacitor://')) return; // already on Pages
+    try {
+      const r = await fetch(PAGES + 'version.json?t=' + Date.now(),
+        { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+      if (r.ok) { location.replace(PAGES); }
+    } catch(e) { /* offline */ }
+  })();
+
+  // ===================== TOAST =====================
+  let toastTimer = null;
+  function showToast(msg, ms = 4000) {
+    const t = document.getElementById('saveToast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  // ===================== SETTINGS =====================
+  let resetDelay = parseInt(localStorage.getItem('resetDelay') || '10', 10);
+  let resetTimer = null;
+
+  // GEMINI_KEY מוזרק בזמן בנייה מ-GitHub Secrets (APK)
+  // localStorage מאפשר עקיפה ידנית (web / debug)
+  let geminiKey = localStorage.getItem('geminiKey') || (typeof GEMINI_KEY !== 'undefined' ? GEMINI_KEY : '') || '';
+
+  // ===================== HF + USER =====================
+  const HF_OWNER = 'omer4561';
+  const HF_REPO  = 'accident-reports';
+  const HF_API   = `https://huggingface.co/api/datasets/${HF_OWNER}/${HF_REPO}`;
+  const HF_FILES = `https://huggingface.co/datasets/${HF_OWNER}/${HF_REPO}/resolve/main`;
+
+  let userId = localStorage.getItem('device_id');
+  if (!userId) { userId = crypto.randomUUID(); localStorage.setItem('device_id', userId); }
+
+  async function hfCommit(filePath, content, isBinary = false) {
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') return;
+    await fetch(`${HF_API}/commit/main`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/x-ndjson' },
+      body: [
+        JSON.stringify({ summary: `report: ${filePath}` }),
+        JSON.stringify({ key: filePath, type: 'addOrUpdate', content: isBinary ? content : btoa(unescape(encodeURIComponent(content))), encoding: 'base64' })
+      ].join('\n')
+    });
+  }
+
+  async function compressForUpload(file, maxPx = 1200, quality = 0.75) {
+    return new Promise(resolve => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(b => resolve(b), 'image/jpeg', quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  // ===================== LOCAL IMAGE CACHE (IndexedDB) =====================
+  let _idb = null;
+  async function _openIDB() {
+    if (_idb) return _idb;
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('acc_imgs', 1);
+      r.onupgradeneeded = e => e.target.result.createObjectStore('imgs');
+      r.onsuccess = e => { _idb = e.target.result; res(_idb); };
+      r.onerror = () => rej(new Error('IDB'));
+    });
+  }
+  async function cacheLocalImg(key, base64) {
+    try {
+      const db = await _openIDB();
+      await new Promise((res, rej) => {
+        const tx = db.transaction('imgs', 'readwrite');
+        tx.objectStore('imgs').put(base64, key);
+        tx.oncomplete = res; tx.onerror = rej;
+      });
+    } catch(e) {}
+  }
+  async function getLocalImg(key) {
+    try {
+      const db = await _openIDB();
+      return await new Promise(res => {
+        const req = db.transaction('imgs').objectStore('imgs').get(key);
+        req.onsuccess = e => res(e.target.result || null);
+        req.onerror = () => res(null);
+      });
+    } catch(e) { return null; }
+  }
+
+  function showRegistrationIfNeeded() {
+    const p = JSON.parse(localStorage.getItem('user_profile') || 'null');
+    if (!p || !p.name || !p.contact)
+      document.getElementById('registrationOverlay').style.display = 'flex';
+  }
+
+  let _regTab = 'email';
+
+  function switchRegTab(tab) {
+    _regTab = tab;
+    const isEmail = tab === 'email';
+    document.getElementById('regEmailField').style.display = isEmail ? 'block' : 'none';
+    document.getElementById('regPhoneField').style.display = isEmail ? 'none' : 'block';
+    document.getElementById('tabEmail').style.background = isEmail ? '#1a73e8' : '#fff';
+    document.getElementById('tabEmail').style.color    = isEmail ? '#fff' : '#1a73e8';
+    document.getElementById('tabPhone').style.background = isEmail ? '#fff' : '#1a73e8';
+    document.getElementById('tabPhone').style.color    = isEmail ? '#1a73e8' : '#fff';
+    _regErr(1, '');
+  }
+
+  function _regErr(step, msg) {
+    const el = document.getElementById('regError' + step);
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+  }
+
+  async function sendOTP() {
+    _regErr(1, '');
+    const name = document.getElementById('regName').value.trim();
+    if (!name) { _regErr(1, 'נא להזין שם מלא'); return; }
+
+    const btn = document.getElementById('regSendBtn');
+    btn.disabled = true; btn.textContent = '⏳ שולח...';
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+
+    try {
+      if (_regTab === 'email') {
+        const email = document.getElementById('regEmail').value.trim();
+        if (!email || !email.includes('@')) { _regErr(1, 'נא להזין כתובת מייל תקינה'); btn.disabled=false; btn.textContent='שלח קוד →'; return; }
+        if (!EMAILJS_KEY || !EMAILJS_SERVICE || EMAILJS_SERVICE.startsWith('__')) throw new Error('שירות מייל לא מוגדר — הוסף secrets: EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY');
+        const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ service_id: EMAILJS_SERVICE, template_id: EMAILJS_TEMPLATE, user_id: EMAILJS_KEY,
+            template_params: { to_email: email, name: name, message: `קוד האימות שלך: ${code}\n\nהקוד בתוקף ל-10 דקות.`, time: new Date().toLocaleString('he-IL') } })
+        });
+        if (!res.ok) throw new Error(`EmailJS ${res.status}: ${await res.text()}`);
+        localStorage.setItem('pending_otp', JSON.stringify({ code, contact: email, name, expiry: Date.now() + 600000 }));
+        document.getElementById('regSentMsg').innerHTML = `📧 קוד נשלח ל-<br><strong style="color:#1a73e8">${email}</strong><br><span style="font-size:12px;color:#888">בדוק תיבת דואר נכנס</span>`;
+      } else {
+        const phone = document.getElementById('regPhone').value.trim();
+        if (!phone) { _regErr(1, 'נא להזין מספר טלפון'); btn.disabled=false; btn.textContent='שלח קוד →'; return; }
+        if (!TG_TOKEN || TG_TOKEN === '') throw new Error('Telegram לא מוגדר');
+        const msg = `🔐 *הרשמה חדשה*\n👤 שם: ${name}\n📱 טלפון: ${phone}\n\n*קוד אימות:* \`${code}\`\n\n_בתוקף ל-10 דקות_`;
+        const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: TG_CHANNEL, text: msg, parse_mode: 'Markdown' })
+        });
+        if (!res.ok) throw new Error(`Telegram ${res.status}`);
+        localStorage.setItem('pending_otp', JSON.stringify({ code, contact: phone, name, expiry: Date.now() + 600000 }));
+        document.getElementById('regSentMsg').innerHTML = `📱 קוד נשלח למפקד<br><strong style="color:#1a73e8">${phone}</strong><br><span style="font-size:12px;color:#888">בקש מהמפקד את הקוד</span>`;
+      }
+      document.getElementById('regStep1').style.display = 'none';
+      document.getElementById('regStep2').style.display = 'block';
+    } catch(e) {
+      _regErr(1, '❌ ' + e.message);
+      btn.disabled = false; btn.textContent = 'שלח קוד →';
+    }
+  }
+
+  function verifyOTP() {
+    _regErr(2, '');
+    const entered = document.getElementById('regOTP').value.trim();
+    const pending = JSON.parse(localStorage.getItem('pending_otp') || 'null');
+    if (!pending) { _regErr(2, 'שלח קוד מחדש'); return; }
+    if (Date.now() > pending.expiry) { _regErr(2, 'הקוד פג תוקף — שלח מחדש'); return; }
+    if (entered !== pending.code) { _regErr(2, 'קוד שגוי — נסה שוב'); return; }
+
+    localStorage.removeItem('pending_otp');
+    const profile = { name: pending.name, contact: pending.contact, registeredAt: Date.now(), userId };
+    localStorage.setItem('user_profile', JSON.stringify(profile));
+    document.getElementById('registrationOverlay').style.display = 'none';
+    hfCommit(`users/${userId}.json`, JSON.stringify(profile)).catch(() => {});
+    showToast('✅ נרשמת בהצלחה!');
+  }
+
+  function editProfile() {
+    const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    document.getElementById('editName').value = p.name || '';
+    const contact = p.contact || '';
+    if (contact.includes('@')) {
+      document.getElementById('editEmail').value = contact;
+      document.getElementById('editPhone').value = '';
+    } else {
+      document.getElementById('editPhone').value = contact;
+      document.getElementById('editEmail').value = '';
+    }
+    document.getElementById('profileView').style.display = 'none';
+    document.getElementById('profileEditForm').style.display = 'block';
+  }
+
+  function cancelEditProfile() {
+    document.getElementById('profileView').style.display = 'block';
+    document.getElementById('profileEditForm').style.display = 'none';
+  }
+
+  function saveEditProfile() {
+    const name = document.getElementById('editName').value.trim();
+    const email = document.getElementById('editEmail').value.trim();
+    const phone = document.getElementById('editPhone').value.trim();
+    if (!name) { showToast('שם לא יכול להיות ריק'); return; }
+    const contact = email || phone;
+    const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    const updated = { ...p, name, contact };
+    localStorage.setItem('user_profile', JSON.stringify(updated));
+    hfCommit(`users/${userId}.json`, JSON.stringify(updated)).catch(() => {});
+    document.getElementById('profileName').textContent = name;
+    document.getElementById('profileId').textContent = contact;
+    cancelEditProfile();
+    showToast('✅ פרטים עודכנו');
+  }
+
+  async function _uploadGroupToHF(key, localPaths, data, folder) {
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') return;
+    const items = window.groupsData[key];
+    if (!items) return;
+    const profile = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    const reportId = `${userId}_${Date.now()}`;
+    const hfUrls = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const compressed = await compressForUpload(items[i].file, 1200, 0.75);
+      const b64 = await new Promise(res => {
+        const reader = new FileReader();
+        reader.onload = e => res(e.target.result.split(',')[1]);
+        reader.readAsDataURL(compressed);
+      });
+      const path = `data/${userId}/${reportId}_p${i+1}.jpg`;
+      await hfCommit(path, b64, true);
+      hfUrls.push(`${HF_FILES}/${path}?token=${HF_TOKEN}`);
+    }
+
+    await hfCommit(`data/${userId}/${reportId}.json`, JSON.stringify({
+      reportId, userId,
+      userName: profile.name || '',
+      userContact: profile.contact || '',
+      plate: data.license_plate || '',
+      date: data.date || '',
+      driver: data.driver_name || '',
+      folder, pages: hfUrls.length, urls: hfUrls,
+      savedAt: new Date().toISOString()
+    }));
+
+    const rec = history.find(x => x.files && x.files[0] === localPaths[0]);
+    if (rec) { rec.hfUrls = hfUrls; saveHistory(); }
+  }
+
+  // ===================== SETTINGS =====================
+  function openSettings() {
+    document.getElementById('delaySlider').value = resetDelay;
+    document.getElementById('delayLabel').textContent = resetDelay;
+    const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    document.getElementById('profileName').textContent = p.name || 'לא רשום';
+    document.getElementById('profileId').textContent = p.contact || '';
+    document.getElementById('settingsOverlay').classList.add('open');
+  }
+  function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+  function settingsOverlayClick(e) { if (e.target === e.currentTarget) closeSettings(); }
+  function updateDelayLabel(v) { document.getElementById('delayLabel').textContent = v; }
+  function saveSettings() {
+    resetDelay = parseInt(document.getElementById('delaySlider').value, 10);
+    localStorage.setItem('resetDelay', resetDelay);
+    closeSettings();
+    showToast('✅ הגדרות נשמרו');
+  }
+
+  function startResetTimer(delaySec) {
+    if (resetTimer) clearTimeout(resetTimer);
+    resetTimer = setTimeout(resetUI, (delaySec ?? resetDelay) * 1000);
+  }
+
+  let errorCountdownInterval = null;
+  function startErrorCountdown(sec, errMsg) {
+    if (errorCountdownInterval) clearInterval(errorCountdownInterval);
+    if (resetTimer) clearTimeout(resetTimer);
+    let remaining = sec;
+    const toast = document.getElementById('saveToast');
+    const errLine = errMsg ? `\n${errMsg}` : '';
+    const update = () => {
+      toast.textContent = `❌ שמירה נכשלה — מוחק תמונות בעוד ${remaining}ש'${errLine}`;
+      toast.classList.add('show');
+      toast.style.whiteSpace = 'pre-line';
+    };
+    update();
+    errorCountdownInterval = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(errorCountdownInterval);
+        errorCountdownInterval = null;
+        toast.classList.remove('show');
+        toast.style.whiteSpace = '';
+        resetUI();
+      } else {
+        update();
+      }
+    }, 1000);
+  }
+
+  function resetUI() {
+    selectedFiles = [];
+    document.getElementById('thumbsRow').innerHTML = '';
+    document.getElementById('countBadge').innerHTML = '';
+    document.getElementById('uploadLabel').textContent = 'בחר תמונות לעיבוד';
+    document.getElementById('uploadArea').classList.remove('has-files');
+    document.getElementById('progressSection').classList.remove('visible');
+    document.getElementById('resultsSection').classList.remove('visible');
+    document.getElementById('resultsList').innerHTML = '';
+    document.getElementById('errorsList').innerHTML = '';
+    document.getElementById('progressList').innerHTML = '';
+    const btn = document.getElementById('processBtn');
+    btn.disabled = true;
+    btn.textContent = 'עבד תמונות';
+    btn.style.background = '';
+    window.groupsData = {};
+  }
+
+  // ===================== UPDATE CHECK =====================
+
+  // ===================== UPDATE CHECK =====================
+  function _showUpdateOverlay() {
+    const overlay = document.getElementById('updateOverlay');
+    overlay.style.display = 'flex';
+    requestAnimationFrame(() => { document.getElementById('updateBar').style.width = '100%'; });
+  }
+
+  (async function checkUpdate() {
+    if (location.href.startsWith('capacitor://')) {
+      location.href = 'https://omer4561.github.io/accident-native';
+      return;
+    }
+    try {
+      const r = await fetch(
+        'https://omer4561.github.io/accident-native/version.json?t=' + Date.now(),
+        { cache: 'no-store' }
+      );
+      if (!r.ok) return;
+      const { ts } = await r.json();
+      const stored = parseInt(localStorage.getItem('app_ts') || '0', 10);
+      if (ts && ts > stored) {
+        localStorage.setItem('app_ts', String(ts));
+        if (stored > 0) { // לא בפתיחה הראשונה אי פעם
+          _showUpdateOverlay();
+          setTimeout(() => location.reload(true), 1800);
+        }
+      }
+    } catch(e) { /* אין רשת */ }
+  })();
+
+  // ===================== VERSION DISPLAY =====================
+  (function() {
+    const el = document.getElementById('appVersionLine');
+    if (el && APP_BUILD) el.textContent = 'גרסה ' + APP_BUILD;
+  })();
+
+  // ===================== HISTORY (localStorage) =====================
+  let history = JSON.parse(localStorage.getItem('acc_history') || '[]');
+  let currentTab = 'folders';
+  let openFolders = new Set();
+  const HE_MONTHS = ['','ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+
+  function saveHistory() { localStorage.setItem('acc_history', JSON.stringify(history)); }
+
+  function addReportToHistory(plate, date, driver, filePaths, folder, dir) {
+    history.unshift({
+      id: Date.now(),
+      plate: plate || 'unknown',
+      date: date || '',
+      driver: driver || '',
+      files: filePaths,
+      folder: folder,
+      dir: dir || null,
+      trashed: false,
+      savedAt: new Date().toLocaleString('he-IL')
+    });
+    if (history.length > 200) history = history.slice(0, 200);
+    saveHistory();
+  }
+
+  function openHistory() {
+    document.getElementById('historyOverlay').classList.add('open');
+    renderPanel();
+  }
+  function closeHistory() { document.getElementById('historyOverlay').classList.remove('open'); }
+  function overlayClick(e) { if (e.target === e.currentTarget) closeHistory(); }
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('tabFolders').className = 'panel-tab' + (tab === 'folders' ? ' active' : '');
+    document.getElementById('tabTrash').className   = 'panel-tab' + (tab === 'trash'   ? ' active' : '');
+    renderPanel();
+  }
+
+  function toggleFolder(key) {
+    if (openFolders.has(key)) openFolders.delete(key);
+    else openFolders.add(key);
+    renderPanel();
+  }
+
+  function folderKey(r) {
+    const folder = r.folder || '';
+    const parts = folder.split('/');
+    const last = parts[parts.length - 1];
+    return last || 'no_date';
+  }
+
+  function folderLabel(key) {
+    if (!key || key === 'no_date') return '📁 ללא תאריך';
+    // YYYY_MM → אפריל 26
+    const m = key.match(/^(\d{4})_(\d{2})$/);
+    if (m) {
+      const mm = parseInt(m[2], 10);
+      return `📁 ${HE_MONTHS[mm] || m[2]} ${m[1].slice(2)}`;
+    }
+    return `📁 ${key}`;
+  }
+
+  function renderPanel() {
+    const content = document.getElementById('panelContent');
+    const q = (document.getElementById('historySearch')?.value || '').trim().toLowerCase();
+
+    function matchSearch(r) {
+      if (!q) return true;
+      return (r.plate||'').toLowerCase().includes(q) ||
+             (r.date||'').includes(q) ||
+             (r.driver||'').toLowerCase().includes(q);
+    }
+
+    if (currentTab === 'trash') {
+      const items = history.filter(r => r.trashed && matchSearch(r));
+      if (!items.length) { content.innerHTML = '<div class="empty-msg">🗑️ הסל ריק</div>'; return; }
+      content.innerHTML = items.map(r => {
+        const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
+        const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
+        return `<div class="report-item trashed">
+          <div class="ri-plate">🚗 ${plate}</div>
+          <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 🕐 ${r.savedAt}</div>
+          <div class="ri-files">${files}</div>
+          <div class="ri-actions">
+            <button class="ri-btn ri-btn-restore" onclick="restoreReport(${r.id})">♻️ שחזר</button>
+            <button class="ri-btn ri-btn-perm"    onclick="permDelete(${r.id})">🗑️ מחק לצמיתות</button>
+          </div></div>`;
+      }).join('');
+      return;
+    }
+
+    // ---- Folders tab ----
+    const active = history.filter(r => !r.trashed && matchSearch(r));
+    if (!active.length) { content.innerHTML = '<div class="empty-msg">📭 אין תיקיות</div>'; return; }
+
+    // Group by year/month
+    const groups = {};
+    for (const r of active) {
+      const k = folderKey(r);
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(r);
+    }
+
+    // Sort newest first
+    const keys = Object.keys(groups).sort((a,b) => {
+      if (a === 'no_date') return 1;
+      if (b === 'no_date') return -1;
+      return b.localeCompare(a);
+    });
+
+    let html = '';
+    for (const k of keys) {
+      const reps = groups[k];
+      const open = openFolders.has(k);
+      const cnt  = reps.length;
+      html += `<div class="folder-row" onclick="toggleFolder('${k}')">
+        <span class="folder-name">${folderLabel(k)}</span>
+        <span class="folder-count">${cnt} דוח${cnt !== 1 ? 'ות' : ''}</span>
+        <span class="folder-arrow">${open ? '▲' : '▼'}</span>
+      </div>`;
+      if (open) {
+        html += '<div class="folder-items">';
+        for (const r of reps) {
+          const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
+          const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
+          const viewBtns = (r.files || []).map((path, i) => {
+            const fname = path.split('/').pop();
+            return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
+          }).join('');
+          html += `<div class="report-item">
+            <div class="ri-plate">🚗 ${plate}</div>
+            <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 👤 ${r.driver || 'לא זוהה'}</div>
+            <div class="ri-files">${files}</div>
+            <div class="ri-actions">
+              ${viewBtns}
+              ${r.files && r.files.length > 1 ? `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();mergeHistoryReport(${r.id})">🔗 קבץ</button>` : ''}
+              <button class="ri-btn ri-btn-del" onclick="event.stopPropagation();trashReport(${r.id})">🗑️ מחק</button>
+            </div></div>`;
+        }
+        html += '</div>';
+      }
+    }
+    content.innerHTML = html;
+  }
+
+  function closeImgViewer() {
+    const img = document.getElementById('imgViewerImg');
+    img.style.transform = '';
+    img.onclick = null;
+    document.getElementById('imgViewer').style.display = 'none';
+    img.src = '';
+  }
+
+  // ---- Pinch-zoom על התמונה ----
+  (function() {
+    let scale = 1, startDist = 0, startScale = 1;
+    let tx = 0, ty = 0, startTx = 0, startTy = 0, panStart = null;
+
+    function dist(t) {
+      const dx = t[0].clientX - t[1].clientX;
+      const dy = t[0].clientY - t[1].clientY;
+      return Math.sqrt(dx*dx + dy*dy);
+    }
+    function applyTransform(img) {
+      img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+    }
+    function resetZoom(img) {
+      scale = 1; tx = 0; ty = 0;
+      img.style.transform = '';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const img = document.getElementById('imgViewerImg');
+      img.style.transformOrigin = 'center center';
+      img.style.transition = 'none';
+      img.style.willChange = 'transform';
+
+      img.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+          startDist = dist(e.touches);
+          startScale = scale;
+          e.preventDefault();
+        } else if (e.touches.length === 1 && scale > 1) {
+          panStart = { x: e.touches[0].clientX - tx, y: e.touches[0].clientY - ty };
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      img.addEventListener('touchmove', e => {
+        if (e.touches.length === 2) {
+          const d = dist(e.touches);
+          scale = Math.min(8, Math.max(1, startScale * d / startDist));
+          applyTransform(img);
+          e.preventDefault();
+        } else if (e.touches.length === 1 && panStart && scale > 1) {
+          tx = e.touches[0].clientX - panStart.x;
+          ty = e.touches[0].clientY - panStart.y;
+          applyTransform(img);
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      img.addEventListener('touchend', e => {
+        if (e.touches.length < 2) panStart = null;
+        if (scale < 1.05) resetZoom(img);
+      });
+
+      // double-tap לאיפוס zoom
+      let lastTap = 0;
+      img.addEventListener('touchend', e => {
+        const now = Date.now();
+        if (now - lastTap < 300) resetZoom(img);
+        lastTap = now;
+      });
+    });
+  })();
+
+  async function openFile(id, idx) {
+    const r = history.find(x => x.id === id);
+    if (!r || !r.files || !r.files[idx]) return;
+
+    const viewer = document.getElementById('imgViewer');
+    const img    = document.getElementById('imgViewerImg');
+    const title  = document.getElementById('imgViewerTitle');
+
+    title.textContent = r.files[idx].split('/').pop();
+    img.src = '';
+    viewer.style.display = 'flex';
+
+    // HF URL — ישיר, ללא קריאת קובץ מקומי
+    if (r.hfUrls && r.hfUrls[idx]) {
+      img.src = r.hfUrls[idx];
+      return;
+    }
+
+    // IndexedDB cache — מהיר, עובד אופליין
+    const cached = await getLocalImg(r.files[idx]);
+    if (cached) {
+      img.src = `data:image/jpeg;base64,${cached}`;
+      return;
+    }
+
+    // fallback: קרא מ-Downloads דרך AndroidBridge
+    showToast('⏳ טוען תמונה…', 10000);
+    const path = r.files[idx];
+    try {
+      let base64 = null;
+
+      if (window.AndroidBridge) {
+        const res = window.AndroidBridge.readFile(path);
+        if (res && !res.startsWith('ERROR:')) base64 = res;
+        else if (res) throw new Error(res.slice(6));
+      }
+
+      if (!base64 && window.Capacitor?.isNativePlatform?.()) {
+        const { Filesystem } = window.Capacitor.Plugins;
+        const dirs = r.dir ? [r.dir] : ['EXTERNAL_STORAGE', 'EXTERNAL', 'DATA'];
+        for (const dir of dirs) {
+          try { const d = await Filesystem.readFile({ path, directory: dir }); base64 = d.data; break; } catch(e) {}
+        }
+      }
+
+      if (!base64) throw new Error('לא נמצא הקובץ');
+      img.src = `data:image/jpeg;base64,${base64}`;
+      img.onload = () => { document.getElementById('saveToast').classList.remove('show'); };
+    } catch(e) {
+      closeImgViewer();
+      showToast('❌ ' + e.message);
+    }
+  }
+
+  async function mergeHistoryReport(id) {
+    const r = history.find(x => x.id === id);
+    if (!r || !r.files || r.files.length < 2) return;
+    showToast('⏳ מקבץ קבצים...');
+    try {
+      if (!window.Capacitor?.isNativePlatform?.()) { showToast('⚠️ זמין רק באפליקציה'); return; }
+      const { Filesystem } = window.Capacitor.Plugins;
+      const DIRS = r.dir ? [r.dir] : ['DOWNLOADS', 'EXTERNAL', 'DATA'];
+
+      // קרא כל קובץ חזרה
+      const files = [];
+      for (const path of r.files) {
+        let data = null;
+        for (const dir of DIRS) {
+          try {
+            const res = await Filesystem.readFile({ path, directory: dir });
+            data = res.data;
+            break;
+          } catch(e) { /* נסה directory הבא */ }
+        }
+        if (!data) throw new Error(`לא נמצא: ${path.split('/').pop()}`);
+        const blob = await fetch(`data:image/jpeg;base64,${data}`).then(r => r.blob());
+        files.push(new File([blob], path.split('/').pop(), { type: 'image/jpeg' }));
+      }
+
+      // אחד
+      const mergedFile = await mergePages(files);
+      const folderObj = dateToFolder(r.date);
+      const folderPath = folderObj.path;
+
+      // שמור קובץ מאוחד
+      const plate = r.plate || 'unknown';
+      const filename = `${plate}_${r.date || 'no_date'}_merged.jpg`.replace(/[\/\\:*?"<>|]/g, '_');
+      let saveResult = null;
+      for (const dir of DIRS) {
+        try {
+          const base64 = await fileToBase64(mergedFile);
+          const path = `Accident_Reports/${folderPath}/${filename}`;
+          await Filesystem.writeFile({ path, data: base64, directory: dir, recursive: true });
+          saveResult = { path, dir };
+          break;
+        } catch(e) { /* נסה הבא */ }
+      }
+      if (!saveResult) throw new Error('שמירה נכשלה');
+
+      // מחק קבצים ישנים
+      for (const path of r.files) {
+        for (const dir of DIRS) {
+          try { await Filesystem.deleteFile({ path, directory: dir }); break; } catch(e) {}
+        }
+      }
+
+      // עדכן היסטוריה
+      r.files = [saveResult.path];
+      r.dir = saveResult.dir;
+      saveHistory();
+      renderPanel();
+      showToast('✅ קובץ מאוחד נשמר');
+    } catch(e) {
+      showToast('❌ ' + e.message);
+    }
+  }
+
+  function trashReport(id) {
+    const r = history.find(x => x.id === id);
+    if (!r) return;
+    if (!confirm(`למחוק את דוח ${r.plate}?\nהקבצים יועברו לסל מחזור.`)) return;
+    r.trashed = true;
+    saveHistory();
+    renderPanel();
+  }
+
+  function restoreReport(id) {
+    const r = history.find(x => x.id === id);
+    if (r) { r.trashed = false; saveHistory(); renderPanel(); }
+  }
+
+  function permDelete(id) {
+    if (!confirm('מחיקה לצמיתות — לא ניתן לשחזר. להמשיך?')) return;
+    history = history.filter(x => x.id !== id);
+    saveHistory();
+    renderPanel();
+  }
+
+  function exportCSV() {
+    const active = history.filter(r => !r.trashed);
+    if (!active.length) { showToast('⚠️ אין דוחות לייצוא'); return; }
+    const rows = [['לוחית רישוי','תאריך','שם נהג','תיקייה','נשמר ב']];
+    for (const r of active) {
+      rows.push([r.plate||'', r.date||'', r.driver||'', r.folder||'', r.savedAt||'']);
+    }
+    const csv = '\uFEFF' + rows.map(r =>
+      r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')
+    ).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), {
+      href: url, download: `דוחות_תאונה_${new Date().toLocaleDateString('he-IL').replace(/\./g,'-')}.csv`
+    });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`📊 יוצאו ${active.length} דוחות ל-CSV`);
+  }
+
+  // ===================== GEMINI VISION AI =====================
+  async function analyzeWithGemini(file, onProg) {
+    onProg?.(10, '🤖 שולח ל-Gemini...');
+    const base64 = await fileToBase64(file);
+    const mime = file.type || 'image/jpeg';
+    const prompt = `זהו טופס דוח תאונה צבאי ישראלי 33.1106.
+חלץ את הנתונים הבאים ותחזיר JSON בלבד (ללא מרכאות חיצוניות, ללא הסבר):
+{"date":"DD.MM.YY","license_plate":"XXX-XX-XXX","driver_name":"שם"}
+אם שדה לא קיים — null. פורמט תאריך: DD.MM.YY בלבד (לדוגמה: 28.4.25).`;
+
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { text: prompt },
+            { inline_data: { mime_type: mime, data: base64 } }
+          ]}],
+          generation_config: { temperature: 0, max_output_tokens: 150 }
+        })
+      }
+    );
+    if (!resp.ok) {
+      const t = await resp.text();
+      throw new Error(`Gemini ${resp.status}: ${t.slice(0,80)}`);
+    }
+    const json = await resp.json();
+    const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+    onProg?.(80, '🤖 מעבד תגובה...');
+    const match = text.match(/\{[\s\S]*?\}/);
+    if (!match) throw new Error('Gemini: תגובה לא תקינה');
+    const data = JSON.parse(match[0]);
+    return {
+      date: data.date || null,
+      license_plate: data.license_plate || null,
+      driver_name: data.driver_name || null
+    };
+  }
+
+  // ===================== OCR ENGINE (מובנה, ללא הורדות) =====================
+  const MAX_SIZE = 100 * 1024 * 1024;
+  let selectedFiles = [];
+  let workerReady = false;
+  let _ocrEngine = null;
+  try { _ocrEngine = new OCREngine(); } catch(e) { console.warn('OCR engine unavailable:', e); }
+
+  (async function initWorker() {
+    const ws = document.getElementById('workerStatus');
+
+    // אם יש Gemini — מוכנים מיד (OCR מקומי הוא גיבוי בלבד)
+    if (geminiKey) {
+      workerReady = true;
+      ws.textContent = '✅ Gemini AI מוכן';
+      ws.className = 'worker-status ready';
+      setTimeout(() => ws.style.display = 'none', 2000);
+      // OCR מקומי בונה ברקע בשקט
+      _ocrEngine?.init().catch(() => {});
+      return;
+    }
+
+    ws.textContent = '⏳ בונה מנוע זיהוי...';
+    try {
+      if (!_ocrEngine) throw new Error('OCR engine not loaded');
+      await _ocrEngine.init((pct, msg) => { ws.textContent = msg; });
+      try {
+        const r = await fetch('ocr-weights.json', { cache: 'no-store' });
+        if (r.ok) { _ocrEngine.loadWeights(await r.text()); ws.textContent += ' (NN)'; }
+      } catch(e) { /* אין קובץ משקלות — template mode */ }
+      workerReady = true;
+      ws.textContent = '✅ מנוע זיהוי מוכן';
+      ws.className = 'worker-status ready';
+      setTimeout(() => ws.style.display = 'none', 2000);
+    } catch(e) {
+      workerReady = true; // נאפשר ניסיון גם אם OCR נכשל
+      ws.textContent = `⚠️ OCR לא זמין — Gemini בלבד`;
+      ws.style.color = '#e65100';
+      setTimeout(() => ws.style.display = 'none', 3000);
+    }
+    if (selectedFiles.length > 0) document.getElementById('processBtn').disabled = false;
+  })();
+
+  // ===================== PHOTO → FILE =====================
+  // fetch(webPath) נכשל כשהדף נטען מ-GitHub Pages (cross-origin לcapacitor://)
+  // Filesystem.readFile עם הנתיב המוחלט (photo.path) עובד תמיד
+  async function capacitorPhotoToFile(absPath, name) {
+    const { Filesystem } = window.Capacitor.Plugins;
+    const { data } = await Filesystem.readFile({ path: absPath });
+    const blob = await fetch(`data:image/jpeg;base64,${data}`).then(r => r.blob());
+    return new File([blob], name, { type: 'image/jpeg' });
+  }
+
+  // ===================== GALLERY PICK =====================
+  async function pickFromGallery() {
+    if (!window.Capacitor?.isNativePlatform?.()) {
+      document.getElementById('fileInput').click();
+      return;
+    }
+    try {
+      const { Camera } = window.Capacitor.Plugins;
+      const result = await Camera.pickImages({ quality: 85, width: 1920 });
+      for (const photo of result.photos) {
+        const name = `gallery_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+        const file = await capacitorPhotoToFile(photo.path, name);
+        selectedFiles.push(file);
+      }
+      updateUploadUI();
+    } catch(e) {
+      if (!e.message?.includes('cancelled') && !e.message?.includes('User cancelled')) showToast('❌ שגיאת גלריה: ' + e.message);
+    }
+  }
+
+  // ===================== CAMERA =====================
+  async function takePicture() {
+    if (!window.Capacitor?.isNativePlatform?.()) {
+      document.getElementById('fileInput').click();
+      return;
+    }
+    try {
+      const { Camera } = window.Capacitor.Plugins;
+      const image = await Camera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: 'uri',
+        source: 'CAMERA',
+        width: 1920,
+        correctOrientation: true
+      });
+      const file = await capacitorPhotoToFile(image.path, `photo_${Date.now()}.jpg`);
+      selectedFiles.push(file);
+      updateUploadUI();
+    } catch(e) {
+      if (!e.message?.includes('cancelled') && !e.message?.includes('User cancelled')) showToast('❌ שגיאת מצלמה: ' + e.message);
+    }
+  }
+
+  // ===================== FILE SELECTION =====================
+  document.getElementById('fileInput').addEventListener('change', function() {
+    const newFiles = Array.from(this.files).filter(f =>
+      f.size <= MAX_SIZE && (f.type.startsWith('image/') || /\.(jpg|jpeg|png|bmp|heic|webp)$/i.test(f.name))
+    );
+    selectedFiles = selectedFiles.concat(newFiles);
+    this.value = '';
+    updateUploadUI();
+  });
+
+  function updateUploadUI() {
+    const area = document.getElementById('uploadArea');
+    const badge = document.getElementById('countBadge');
+    const thumbs = document.getElementById('thumbsRow');
+
+    if (!selectedFiles.length) {
+      area.className = 'upload-area';
+      document.getElementById('uploadLabel').textContent = 'בחר תמונות לעיבוד';
+      badge.innerHTML = ''; thumbs.innerHTML = '';
+      document.getElementById('processBtn').disabled = true;
+      document.getElementById('processBtn').textContent = 'עבד תמונות';
+      return;
+    }
+
+    area.className = 'upload-area has-files';
+    document.getElementById('uploadLabel').textContent = 'הוסף עוד תמונות';
+    badge.innerHTML = `<div class="count-badge">✅ ${selectedFiles.length} תמונות נבחרו</div>`;
+
+    const show = selectedFiles.slice(0, 5);
+    const extra = selectedFiles.length - 5;
+    thumbs.innerHTML = show.map(f => {
+      const url = URL.createObjectURL(f);
+      return `<div class="thumb-item"><img src="${url}" onload="URL.revokeObjectURL(this.src)"></div>`;
+    }).join('') + (extra > 0 ? `<div class="thumb-more">+${extra}</div>` : '');
+
+    document.getElementById('processBtn').disabled = false;
+    document.getElementById('processBtn').textContent = `🔍 עבד ${selectedFiles.length} תמונות`;
+  }
+
+  // ===================== PARSE FIELDS =====================
+  function extractDate(text) {
+    const curYear = new Date().getFullYear();
+    // sep1: סימני פרידה נפוצים (כולל תווי OCR שגויים l/I במקום /)
+    // sep2: רווחים בלבד — fallback כשOCR לא מזהה את הסלאש
+    const seps = [
+      '[\\s]*[/\\.\\-|\\\\lI][\\s]*',
+      '[\\s]+'
+    ];
+    for (const sep of seps) {
+      const patterns = [
+        { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{4})`),        type: 'dmy4' },
+        { rx: new RegExp(`(\\d{4})${sep}(\\d{1,2})${sep}(\\d{1,2})`),        type: 'ymd4' },
+        { rx: new RegExp(`(\\d{1,2})${sep}(\\d{1,2})${sep}(\\d{2})(?!\\d)`), type: 'dmy2' },
+      ];
+      for (const { rx, type } of patterns) {
+        const m = text.match(rx);
+        if (!m) continue;
+        let dd, mm, yyyy;
+        if (type === 'dmy4') { dd=+m[1]; mm=+m[2]; yyyy=+m[3]; }
+        else if (type === 'ymd4') { yyyy=+m[1]; mm=+m[2]; dd=+m[3]; }
+        else if (type === 'dmy2') { dd=+m[1]; mm=+m[2]; yyyy=2000+(+m[3]); }
+        if (mm>=1&&mm<=12&&dd>=1&&dd<=31) {
+          return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
+        }
+      }
+    }
+    // last resort: DD/MM ללא שנה (למשל 28.3 או 28.3.)
+    const dm = text.match(new RegExp(`(\\d{1,2})[\\s]*[/\\.\\-|\\\\lI][\\s]*(\\d{1,2})(?!\\d)`));
+    if (dm) {
+      const dd=+dm[1], mm=+dm[2];
+      if (mm>=1&&mm<=12&&dd>=1&&dd<=31)
+        return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${curYear}`;
+    }
+    return null;
+  }
+
+  // מחלץ לוחית רישוי מטקסט נתון
+  function extractPlate(text) {
+    const pats = [
+      /(?<!\d)(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})(?!\d)/,  // 123-45-678
+      /(?<!\d)(\d{2,3})[ \t](\d{2,3})[ \t](\d{2,3})(?!\d)/,             // 123 45 678
+      /(?<!\d)(\d{7,8})(?!\d)/,                                           // 12345678 צבאי
+    ];
+    for (const rx of pats) {
+      const m = text.match(rx);
+      if (m) return m[2] ? `${m[1]}-${m[2]}-${m[3]}` : m[1];
+    }
+    return null;
+  }
+
+  function parseFields(text) {
+    const data = { date: null, license_plate: null, driver_name: null };
+
+    // ================================================================
+    // תאריך — חיפוש לפי מיקום בטופס 33.1106
+    // ================================================================
+
+    let m;
+
+    // -- עמוד 2, מלבן הצהרת נהג: "תאריך פרטי הנהג" --
+    // OCR מחזיר את התאריך כטקסט מייד אחרי התווית
+    const p2DeclRx = /תאריך\s*פרטי\s*הנהג[^\d\n]{0,10}([\d][^\n]{1,30})/gi;
+    while ((m = p2DeclRx.exec(text)) !== null) {
+      const c = extractDate(m[1]);
+      if (c) { data.date = c; break; }
+    }
+
+    // -- עמוד 2, חלק ג': "ניתן אישור תיקון בתאריך" --
+    if (!data.date) {
+      const p2PartCRx = /(?:ניתן\s*אישור.*?בתאריך|תאריך.*?אישור)[^\d\n]{0,15}([\d][^\n]{1,30})/gi;
+      while ((m = p2PartCRx.exec(text)) !== null) {
+        const c = extractDate(m[1]);
+        if (c) { data.date = c; break; }
+      }
+    }
+
+    // -- עמוד 2, מצהיר/חלק ג' כללי --
+    if (!data.date) {
+      const p2Rx = /(?:מצהיר|חלק\s*ג|סא["״׳']?ל|חתימת?\s*(?:קצין|מפקד))[^\d\n]{0,50}([\d][^\n]{1,30})/gi;
+      while ((m = p2Rx.exec(text)) !== null) {
+        const c = extractDate(m[1]);
+        if (c) { data.date = c; break; }
+      }
+    }
+
+    // -- תוויות תאריך רגילות (עמוד 1 ועמוד 2) --
+    if (!data.date) {
+      const labelRx = /(?:תאריך(?:\s*ה?תאונה)?|בתאריך|ב-)[^\d\n]{0,20}([\d][^\n]{1,30})/gi;
+      while ((m = labelRx.exec(text)) !== null) {
+        const c = extractDate(m[1]);
+        if (c) { data.date = c; break; }
+      }
+    }
+
+    // -- fallback: 600 תווים ראשונים, אחר כך כל הטקסט --
+    if (!data.date) data.date = extractDate(text.slice(0, 600));
+    if (!data.date) data.date = extractDate(text);
+
+    // ================================================================
+    // לוחית רישוי — חיפוש לפי מיקום בטופס 33.1106
+    // ================================================================
+
+    // עמוד 1: מלבן שמאל-עליון — תאריך בשורה ראשונה, לוחית שתי שורות מתחת.
+    // בOCR שניהם יופיעו קרובים. מנסים קודם ליד תווית "מספר רכב":
+    // "מספר רישום" בחלק ג' (לוחית הרכב שנכנס לתיקון) + קריאות שגויות של OCR
+    const plateLabelRx = /(?:מספר\s*(?:רישום|הרכב|רכב|לוחית|זיהוי)|מס[יי׳'.]\s*(?:רישום|רכב|ולוסה|ולוחית)|לוחית\s*(?:רישוי|זיהוי)|ולוסה)[^\d\n]{0,20}([\d\-–][^\n]{1,20})/gi;
+    while ((m = plateLabelRx.exec(text)) !== null) {
+      const p = extractPlate(m[1]);
+      if (p) { data.license_plate = p; break; }
+    }
+
+    // אם לא נמצא ליד תווית — חפש בכל הטקסט
+    if (!data.license_plate) data.license_plate = extractPlate(text);
+
+    // ================================================================
+    // שם נהג
+    // ================================================================
+    const nm = text.match(/(?:שם(?:\s*מלא)?|שם\s*הנהג|נהג|בעל\s*הרכב)[^:\n]{0,10}[:\s]+([\u0590-\u05FF][^\n]{1,30})/);
+    if (nm) data.driver_name = nm[1].trim();
+
+    return data;
+  }
+
+  // מחזיר { path: 'YYYY_MM', label: 'אפריל 26' }
+  function dateToFolder(date) {
+    if (!date) return { path: 'no_date', label: 'ללא תאריך' };
+    const norm = date.trim().replace(/[-\.]/g, '/');
+    const p = norm.split('/');
+    let mm, yy;
+    if (p[0] && p[0].length === 4) {
+      yy = parseInt(p[0], 10);
+      mm = parseInt(p[1] || '1', 10);
+    } else {
+      mm = parseInt(p[1] || '1', 10);
+      yy = p[2] ? parseInt(p[2], 10) : new Date().getFullYear();
+      if (yy < 100) yy += 2000;
+    }
+    if (!mm || mm < 1 || mm > 12) mm = 1;
+    return {
+      path: `${yy}_${String(mm).padStart(2,'0')}`,
+      label: `${HE_MONTHS[mm]} ${String(yy).slice(2)}`
+    };
+  }
+
+  function buildFilename(data, pageNum, multiPage, ext) {
+    const plate = (data.license_plate || 'unknown_plate').replace(/[^a-zA-Z0-9\-]/g, '_');
+    let dateStr = 'no_date';
+    if (data.date) {
+      // תומך בכל הפורמטים: DD.MM.YY, DD/MM/YYYY, YYYY-MM-DD
+      const norm = data.date.trim().replace(/[-\/]/g, '.');
+      dateStr = norm.replace(/\./g, '_');
+    }
+    return `${plate}_${dateStr}${multiPage ? `_p${pageNum}` : ''}${ext}`;
+  }
+
+  // ===================== MERGE PAGES (canvas — לשימוש ב-mergeHistoryReport בלבד) =====================
+  async function mergePages(files) {
+    if (files.length === 1) return files[0];
+    const dataUrls = await Promise.all(files.map(f => new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(f);
+    })));
+    const imgs = await Promise.all(dataUrls.map(src => new Promise((res, rej) => {
+      const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = src;
+    })));
+    const MAX_W = 1920;
+    const maxW = Math.min(Math.max(...imgs.map(im => im.naturalWidth)), MAX_W);
+    const totalH = imgs.reduce((s, im) => s + Math.round(im.naturalHeight * maxW / im.naturalWidth), 0);
+    const c = document.createElement('canvas');
+    c.width = maxW; c.height = totalH;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, maxW, totalH);
+    let y = 0;
+    for (const im of imgs) {
+      const h = Math.round(im.naturalHeight * maxW / im.naturalWidth);
+      ctx.drawImage(im, 0, y, maxW, h); y += h;
+    }
+    const b64 = c.toDataURL('image/jpeg', 0.92).split(',')[1];
+    const bin = atob(b64); const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new File([arr.buffer], 'merged.jpg', { type: 'image/jpeg' });
+  }
+
+  // ===================== FILE SAVE =====================
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function saveFile(file, filename, folder) {
+    if (window.Capacitor?.isNativePlatform?.()) {
+      const base64 = await fileToBase64(file);
+
+      // AndroidBridge — MediaStore API, שומר ל-Downloads/ (APK חדש)
+      if (window.AndroidBridge) {
+        const result = window.AndroidBridge.saveFile(base64, filename, folder || '');
+        if (!result || result.startsWith('ERROR:')) {
+          throw new Error(result ? result.slice(6) : 'אין תגובה מ-AndroidBridge');
+        }
+        return { path: result.slice(3), dir: 'DOWNLOADS' };
+      }
+
+      // Fallback — Capacitor Filesystem (APK ישן)
+      const { Filesystem } = window.Capacitor.Plugins;
+      const subPath = folder ? `Accident_Reports/${folder}/${filename}` : `Accident_Reports/${filename}`;
+      const dirPath  = folder ? `Accident_Reports/${folder}` : 'Accident_Reports';
+      const TRIES = [
+        { path: subPath, directory: 'EXTERNAL_STORAGE' },
+        { path: subPath, directory: 'EXTERNAL' },
+        { path: subPath, directory: 'DATA' },
+      ];
+      let lastErr = '';
+      for (const t of TRIES) {
+        try {
+          await Filesystem.mkdir({ path: dirPath, directory: t.directory, recursive: true }).catch(() => {});
+          await Filesystem.writeFile({ path: t.path, data: base64, directory: t.directory, recursive: true });
+          try {
+            const { uri } = await Filesystem.getUri({ path: t.path, directory: t.directory });
+            if (window.AndroidMediaScanner) window.AndroidMediaScanner.scanFile(uri.replace('file://', ''));
+          } catch(e) { /* silent */ }
+          return { path: t.path, dir: t.directory };
+        } catch(e) {
+          lastErr = `[${t.directory}] ${e.message}`;
+        }
+      }
+      throw new Error('שגיאת שמירה: ' + lastErr);
+    }
+
+    // Browser / web fallback — trigger download
+    const dataUrl = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+    const a = Object.assign(document.createElement('a'), { href: dataUrl, download: filename });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    return { path: filename, dir: 'download' };
+  }
+
+  function updateGroupData(key, field, value) {
+    if (window.groupsData[key]) {
+      window.groupsData[key].forEach(item => { item.data[field] = value || null; });
+    }
+    // אל תתחיל טיימר בעת הקלדה — רק אחרי שמירה מוצלחת
+  }
+
+  function allGroupsFilled() {
+    if (!window.groupsData || !Object.keys(window.groupsData).length) return false;
+    for (const [key, items] of Object.entries(window.groupsData)) {
+      const d = items[0]?.data;
+      if (!d) return false;
+      if (!d.license_plate || !d.date || !d.driver_name) return false;
+    }
+    return true;
+  }
+
+  async function saveSinglePage(key, idx, btn) {
+    const items = window.groupsData[key];
+    if (!items || !items[idx]) return;
+    btn.disabled = true; btn.textContent = '⏳';
+    const item = items[idx];
+    const merged = item.data;
+    const ext = '.' + item.file.name.split('.').pop().toLowerCase();
+    const filename = buildFilename(merged, idx+1, items.length>1, ext);
+    const folder = dateToFolder(merged.date);
+    try {
+      await saveFile(item.file, filename, folder.path);
+      btn.textContent = `✅ עמוד ${idx+1}`;
+      btn.style.background = '#34a853'; btn.style.color = 'white';
+      startResetTimer();
+    } catch(e) {
+      btn.textContent = `❌ ${e.message}`; btn.disabled = false;
+      btn.style.whiteSpace = 'normal'; btn.style.fontSize = '12px';
+      startErrorCountdown(20, e.message);
+    }
+  }
+
+  async function saveGroup(key, btn) {
+    const items = window.groupsData[key];
+    if (!items) return;
+    // ביטול countdown שגיאה קיים אם המשתמש מנסה שוב
+    if (errorCountdownInterval) { clearInterval(errorCountdownInterval); errorCountdownInterval = null; }
+    if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
+    btn.disabled = true;
+    btn.textContent = '⏳ שומר...';
+
+    const merged = items[0].data;
+    const folder = dateToFolder(merged.date);
+
+    try {
+      const multiPage = items.length > 1;
+      const savedPaths = [];
+      for (let i = 0; i < items.length; i++) {
+        const filename = buildFilename(merged, i + 1, multiPage, '.jpg');
+        const r = await saveFile(items[i].file, filename, folder.path);
+        savedPaths.push(r.path);
+        // שמור תמונה ב-IndexedDB לצפייה מקומית
+        compressForUpload(items[i].file, 1200, 0.75)
+          .then(c => fileToBase64(c))
+          .then(b64 => cacheLocalImg(r.path, b64))
+          .catch(() => {});
+      }
+      const folderDisplay = `Accident_Reports/${folder.label}`;
+      addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay, 'DOWNLOADS');
+      // העלאה ל-HuggingFace ברקע — לא חוסמת UI
+      _uploadGroupToHF(key, savedPaths, merged, folderDisplay).catch(() => {});
+
+      btn.textContent = '✅ נשמר';
+      btn.style.background = '#34a853';
+      showToast(`📂 Downloads/Accident_Reports/${folder.label}`);
+      startResetTimer();
+    } catch(e) {
+      btn.textContent = `❌ ${e.message}`;
+      btn.style.background = '#c5221f';
+      btn.style.whiteSpace = 'normal'; btn.style.fontSize = '12px';
+      btn.disabled = false;
+      startErrorCountdown(20, e.message);
+    }
+  }
+
+  // ===================== OCR PROCESSING =====================
+  function setProgress(i, pct, txt) {
+    const b = document.getElementById('bar_'+i), s = document.getElementById('status_'+i);
+    if (b) b.style.width = pct+'%';
+    if (s) s.textContent = txt;
+  }
+
+  function resizeForOCR(file) {
+    return new Promise(resolve => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, MAX_OCR_PX / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // Grayscale בלבד — בינריזציה גלובלית מוחקת כתב יד בצבע בהיר
+        const id = ctx.getImageData(0, 0, w, h);
+        const d = id.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const g = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+          d[i] = d[i+1] = d[i+2] = g;
+          d[i+3] = 255;
+        }
+        ctx.putImageData(id, 0, 0);
+
+        // PNG — ללא artifacts של דחיסת JPEG
+        c.toBlob(resolve, 'image/png');
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  async function startProcessing() {
+    if (!selectedFiles.length) return;
+
+    document.getElementById('processBtn').disabled = true;
+    document.getElementById('processBtn').textContent = 'מעבד...';
+    const pSec = document.getElementById('progressSection');
+    const pList = document.getElementById('progressList');
+    pSec.classList.add('visible'); pList.innerHTML = '';
+
+    selectedFiles.forEach((file, i) => {
+      const row = document.createElement('div');
+      row.className = 'file-progress';
+      row.innerHTML = `<div class="file-name">${file.name}</div>
+        <div class="progress-bar-bg"><div class="progress-bar" id="bar_${i}"></div></div>
+        <div class="progress-status" id="status_${i}">ממתין...</div>`;
+      pList.appendChild(row);
+    });
+
+    const results = [], errors = [];
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      try {
+        let data;
+        if (geminiKey) {
+          try {
+            data = await analyzeWithGemini(file, (pct, msg) => setProgress(i, pct, msg));
+            setProgress(i, 100, '✅ Gemini AI');
+          } catch(geminiErr) {
+            if (_ocrEngine) {
+              setProgress(i, 50, `⚠️ Gemini נכשל, עובר ל-OCR מקומי...`);
+              data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, 50 + pct/2, msg));
+            } else {
+              setProgress(i, 100, '⚠️ Gemini נכשל — מלא ידנית');
+              data = { date: null, license_plate: null, driver_name: null };
+            }
+          }
+        } else if (_ocrEngine) {
+          data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, pct, msg));
+        } else {
+          setProgress(i, 100, '⚠️ אין מנוע זיהוי — מלא ידנית');
+          data = { date: null, license_plate: null, driver_name: null };
+        }
+        results.push({ file, data, index: i, rawText: '' });
+      } catch(e) {
+        setProgress(i, 100, `❌ ${e.message}`);
+        errors.push({ file, error: e.message });
+      }
+    }
+
+    showResults(results, errors);
+    document.getElementById('processBtn').disabled = false;
+    document.getElementById('processBtn').textContent = `🔍 עבד ${selectedFiles.length} תמונות`;
+  }
+
+  // ===================== SHOW RESULTS =====================
+  function showResults(results, errors) {
+    const section = document.getElementById('resultsSection');
+    const resultsList = document.getElementById('resultsList');
+    const errorsList = document.getElementById('errorsList');
+    section.classList.add('visible');
+    resultsList.innerHTML = ''; errorsList.innerHTML = '';
+    window._rawTexts = {};
+
+    document.getElementById('summaryBar').textContent =
+      `✅ עובדו ${results.length} קבצים${errors.length ? ` | ❌ ${errors.length} נכשלו` : ''}`;
+
+    // כל הקבצים שהועלו יחד = קבוצה אחת (דוח אחד עם כמה עמודים)
+    const groups = { 'report__0': results };
+
+    window.groupsData = {};
+    for (const [key, items] of Object.entries(groups)) {
+      const merged = items.reduce((acc, item) => ({
+        date: acc.date || item.data.date,
+        license_plate: acc.license_plate || item.data.license_plate,
+        driver_name: acc.driver_name || item.data.driver_name
+      }), { date: null, license_plate: null, driver_name: null });
+      window.groupsData[key] = items.map(item => ({ ...item, data: merged }));
+    }
+
+    for (const [key, items] of Object.entries(window.groupsData)) {
+      const merged = items[0].data;
+      const multiPage = items.length > 1;
+      const card = document.createElement('div');
+      card.className = 'group-card';
+
+      const safeKey = key.replace(/'/g, "\\'");
+      const ek = safeKey.replace(/[^a-z0-9]/gi,'_');
+
+      card.innerHTML = `
+        <div class="edit-grid">
+          <div>
+            <div class="edit-label">🚗 לוחית רישוי</div>
+            <input class="edit-field" id="plate_${ek}" value="${(merged.license_plate||'').replace(/"/g,'&quot;')}"
+              placeholder="לא זוהתה" oninput="updateGroupData('${safeKey}','license_plate',this.value)">
+          </div>
+          <div>
+            <div class="edit-label">📅 תאריך</div>
+            <input class="edit-field" id="date_${ek}" value="${(merged.date||'').replace(/"/g,'&quot;')}"
+              placeholder="לא זוהה" oninput="updateGroupData('${safeKey}','date',this.value)">
+          </div>
+        </div>
+        <div class="edit-row">
+          <div class="edit-label">👤 שם נהג</div>
+          <input class="edit-field" id="driver_${ek}" value="${(merged.driver_name||'').replace(/"/g,'&quot;')}"
+            placeholder="לא זוהה" oninput="updateGroupData('${safeKey}','driver_name',this.value)">
+        </div>
+        ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים</div>` : ''}
+        <div class="pages-row">
+          <button class="page-btn-all" onclick="saveGroup('${safeKey}', this)">
+            💾 שמור${multiPage ? ` (${items.length} עמודים)` : ''}<br>
+            <small style="font-size:10px;opacity:0.85">דוחות_תאונה/</small>
+          </button>
+        </div>`;
+      resultsList.appendChild(card);
+    }
+
+    errors.forEach(e => {
+      const div = document.createElement('div');
+      div.className = 'error-tag';
+      div.textContent = `❌ ${e.file.name}: ${e.error}`;
+      errorsList.appendChild(div);
+    });
+
+    section.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // ===================== REGISTRATION CHECK ON LOAD =====================
+  document.addEventListener('DOMContentLoaded', showRegistrationIfNeeded);
+</script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ניהול דוחות תאונה</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; direction: rtl; }
+    header { background: #1a73e8; color: #fff; padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; }
+    .controls { padding: 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: #fff; border-bottom: 1px solid #e0e0e0; }
+    .controls select, .controls input { padding: 8px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; }
+    .controls button { padding: 8px 16px; background: #1a73e8; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    .stats { padding: 12px 16px; background: #e8f0fe; font-size: 13px; color: #333; }
+    #reports { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; padding: 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .card-plate { font-weight: bold; font-size: 16px; color: #1a73e8; }
+    .card-date { font-size: 12px; color: #888; }
+    .card-meta { font-size: 13px; color: #555; margin-bottom: 10px; line-height: 1.6; }
+    .card-user { font-size: 12px; background: #f8f9fa; border-radius: 6px; padding: 6px 8px; color: #444; margin-bottom: 10px; }
+    .card-imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+    .card-imgs img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; cursor: pointer; transition: opacity 0.2s; }
+    .card-imgs img:hover { opacity: 0.85; }
+    #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 9999; align-items: center; justify-content: center; }
+    #lightbox.open { display: flex; }
+    #lightbox img { max-width: 95vw; max-height: 90vh; object-fit: contain; border-radius: 8px; }
+    #lightbox button { position: absolute; top: 16px; left: 16px; background: rgba(255,255,255,0.2); border: none; color: #fff; font-size: 24px; cursor: pointer; border-radius: 50%; width: 44px; height: 44px; }
+    .loading { text-align: center; padding: 48px; color: #888; font-size: 16px; }
+    .empty { text-align: center; padding: 48px; color: #aaa; }
+    #loginOverlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999; align-items:center; justify-content:center; }
+    #loginOverlay.open { display:flex; }
+    #loginBox { background:#fff; border-radius:16px; padding:36px 32px; text-align:center; width:320px; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
+    #loginBox h2 { margin-bottom:20px; color:#1a73e8; font-size:20px; }
+    #loginBox input { width:100%; padding:12px; border:1.5px solid #ddd; border-radius:8px; font-size:16px; margin-bottom:12px; text-align:center; letter-spacing:2px; }
+    #loginBox input:focus { outline:none; border-color:#1a73e8; }
+    #loginBox button { width:100%; padding:12px; background:#1a73e8; color:#fff; border:none; border-radius:8px; font-size:16px; cursor:pointer; }
+    #loginBox button:hover { background:#1558b0; }
+    #loginError { color:#c5221f; font-size:13px; margin-top:10px; min-height:18px; }
+    #logoutBtn { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.4); color:#fff; padding:4px 12px; border-radius:6px; font-size:12px; cursor:pointer; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; background: #e8f0fe; color: #1a73e8; }
+    #filterUser { min-width: 160px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🚗 ניהול דוחות תאונה</h1>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div id="headerStatus" style="font-size:13px;opacity:0.85"></div>
+    <button id="logoutBtn" onclick="adminLogout()">יציאה</button>
+  </div>
+</header>
+
+<!-- Login Overlay -->
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>🔐 כניסת מנהל</h2>
+    <input type="password" id="passInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')checkLogin()">
+    <button onclick="checkLogin()">כניסה</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <select id="filterUser" onchange="applyFilter()"><option value="">כל המשתמשים</option></select>
+  <input type="text" id="filterSearch" placeholder="חפש לוחית / תאריך / נהג..." oninput="applyFilter()" style="min-width:200px">
+  <button onclick="loadReports()">🔄 רענן</button>
+  <button onclick="exportAdminCSV()" style="background:#34a853">📊 ייצא CSV</button>
+</div>
+
+<div class="stats" id="statsBar"></div>
+
+<div id="reports"><div class="loading">⏳ טוען נתונים...</div></div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <button onclick="event.stopPropagation();closeLightbox()">✕</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+  const HF_TOKEN = '__HF_TOKEN__';
+  const HF_OWNER = 'omer4561';
+  const HF_REPO  = 'accident-reports';
+  const HF_API   = `https://huggingface.co/api/datasets/${HF_OWNER}/${HF_REPO}`;
+  const HF_FILES = `https://huggingface.co/datasets/${HF_OWNER}/${HF_REPO}/resolve/main`;
+  const ADMIN_PASS = 'admin2025';
+  const AUTH_KEY  = 'admin_authed';
+
+  function checkLogin() {
+    const val = document.getElementById('passInput').value;
+    if (val === ADMIN_PASS) {
+      localStorage.setItem(AUTH_KEY, '1');
+      document.getElementById('loginOverlay').classList.remove('open');
+      loadReports();
+    } else {
+      document.getElementById('loginError').textContent = '❌ סיסמה שגויה';
+      document.getElementById('passInput').value = '';
+      document.getElementById('passInput').focus();
+    }
+  }
+
+  function adminLogout() {
+    localStorage.removeItem(AUTH_KEY);
+    location.reload();
+  }
+
+  // בדיקת אימות בכניסה
+  if (localStorage.getItem(AUTH_KEY) !== '1') {
+    document.getElementById('loginOverlay').classList.add('open');
+    setTimeout(() => document.getElementById('passInput').focus(), 100);
+  } else {
+    loadReports();
+  }
+
+  let allReports = [];
+  let allUsers = {};
+
+  async function hfGet(path) {
+    const r = await fetch(`${HF_API}/tree/main/${path}`,
+      { headers: { 'Authorization': `Bearer ${HF_TOKEN}` } });
+    if (r.status === 401 || r.status === 403) throw new Error('HF_TOKEN לא תקין — בדוק את הסוד ב-GitHub');
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function hfReadJson(repoPath) {
+    const r = await fetch(`${HF_FILES}/${repoPath}?token=${HF_TOKEN}`);
+    if (!r.ok) return null;
+    return r.json();
+  }
+
+  async function loadReports() {
+    const container = document.getElementById('reports');
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') {
+      container.innerHTML = '<div class="loading">⚠️ HF_TOKEN לא הוגדר ב-GitHub Secrets — הוסף את הסוד ופרוס מחדש</div>';
+      return;
+    }
+    container.innerHTML = '<div class="loading">⏳ טוען נתונים מ-HuggingFace...</div>';
+    allReports = [];
+    allUsers = {};
+
+    try {
+      // טען פרופילי משתמשים
+      const userFiles = await hfGet('users');
+      for (const f of userFiles.filter(x => x.type === 'file' && x.path.endsWith('.json'))) {
+        try {
+          const u = await hfReadJson(f.path);
+          if (u && u.userId) allUsers[u.userId] = u;
+        } catch(e) {}
+      }
+
+      // טען דוחות
+      const userDirs = await hfGet('data');
+      for (const dir of userDirs.filter(x => x.type === 'directory')) {
+        const dirName = dir.path.replace('data/', '');
+        const files = await hfGet(`data/${dirName}`);
+        for (const f of files.filter(x => x.type === 'file' && x.path.endsWith('.json'))) {
+          try {
+            const meta = await hfReadJson(f.path);
+            if (meta) allReports.push(meta);
+          } catch(e) {}
+        }
+      }
+
+      // מיון: חדש ראשון
+      allReports.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+
+      // עדכן פילטר משתמשים
+      const users = {};
+      allReports.forEach(r => { if (r.userName) users[r.userId] = r.userName; });
+      const sel = document.getElementById('filterUser');
+      sel.innerHTML = '<option value="">כל המשתמשים</option>';
+      Object.entries(users).forEach(([uid, name]) => {
+        sel.insertAdjacentHTML('beforeend', `<option value="${uid}">${name}</option>`);
+      });
+
+      document.getElementById('headerStatus').textContent = `${allReports.length} דוחות · ${Object.keys(users).length} משתמשים`;
+      applyFilter();
+    } catch(e) {
+      container.innerHTML = `<div class="loading">❌ שגיאה: ${e.message}</div>`;
+    }
+  }
+
+  function applyFilter() {
+    const uid = document.getElementById('filterUser').value;
+    const q = document.getElementById('filterSearch').value.trim().toLowerCase();
+    const filtered = allReports.filter(r => {
+      if (uid && r.userId !== uid) return false;
+      if (q) {
+        const s = `${r.plate} ${r.date} ${r.driver} ${r.userName} ${r.personalId}`.toLowerCase();
+        if (!s.includes(q)) return false;
+      }
+      return true;
+    });
+    renderReports(filtered);
+  }
+
+  function renderReports(reports) {
+    const container = document.getElementById('reports');
+    const stats = document.getElementById('statsBar');
+
+    if (!reports.length) {
+      container.innerHTML = '<div class="empty">📭 אין דוחות תואמים</div>';
+      stats.textContent = '';
+      return;
+    }
+
+    stats.textContent = `מציג ${reports.length} מתוך ${allReports.length} דוחות`;
+
+    container.innerHTML = reports.map(meta => {
+      const imgs = (meta.urls || []).map((u, i) =>
+        `<img src="${u}" loading="lazy" alt="עמוד ${i+1}" onclick="openLightbox('${u.replace(/'/g,"\\'")}');event.stopPropagation()">`
+      ).join('');
+
+      const savedDate = meta.savedAt ? new Date(meta.savedAt).toLocaleString('he-IL') : '';
+      const userInfo = allUsers[meta.userId] || {};
+
+      return `<div class="card">
+        <div class="card-header">
+          <div class="card-plate">🚗 ${meta.plate || 'לא זוהה'}</div>
+          <div class="card-date">${savedDate}</div>
+        </div>
+        <div class="card-meta">
+          📅 ${meta.date || 'ללא תאריך'} &nbsp; 👤 ${meta.driver || 'לא זוהה'}
+          ${meta.pages > 1 ? `&nbsp; <span class="badge">${meta.pages} עמודים</span>` : ''}
+        </div>
+        <div class="card-user">
+          👨‍💼 ${meta.userName || 'לא ידוע'} &nbsp;|&nbsp; 📞 ${meta.userContact || '—'}
+        </div>
+        ${imgs ? `<div class="card-imgs">${imgs}</div>` : '<div style="color:#aaa;font-size:12px">אין תמונות</div>'}
+      </div>`;
+    }).join('');
+  }
+
+  function openLightbox(url) {
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('open');
+  }
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.getElementById('lightboxImg').src = '';
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+  function exportAdminCSV() {
+    if (!allReports.length) { alert('אין נתונים לייצוא'); return; }
+    const rows = [['לוחית','תאריך','נהג','שם משתמש','טלפון/מייל','תיקייה','נשמר ב','עמודים']];
+    for (const r of allReports) {
+      rows.push([r.plate||'', r.date||'', r.driver||'', r.userName||'', r.userContact||'', r.folder||'', r.savedAt||'', r.pages||1]);
+    }
+    const csv = '\uFEFF' + rows.map(r =>
+      r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')
+    ).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: 'admin_reports.csv' });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // הטעינה מתבצעת מ-checkLogin() או מבדיקת ה-localStorage למעלה
+</script>
+</body>
+</html>
