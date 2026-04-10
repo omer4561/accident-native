@@ -2,8 +2,33 @@
 <html dir="rtl" lang="he">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ניהול דוחות תאונה</title>
+  <script>
+    // בדיקת גרסה — אם יש גרסה חדשה, טען מחדש אוטומטית
+    (async function() {
+      try {
+        const r = await fetch('https://omer4561.github.io/accident-native/version.json?t=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) return;
+        const { ts } = await r.json();
+        const key = 'admin_ts';
+        const stored = parseInt(localStorage.getItem(key) || '0', 10);
+        if (ts && ts > stored) {
+          localStorage.setItem(key, String(ts));
+          if (stored > 0) {
+            // גרסה חדשה — נקה cache וטען
+            if ('caches' in window) {
+              const names = await caches.keys();
+              await Promise.all(names.map(n => caches.delete(n)));
+            }
+            location.href = location.href.split('?')[0] + '?t=' + ts;
+          }
+        }
+      } catch(e) {}
+    })();
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; direction: rtl; }
