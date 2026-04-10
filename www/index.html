@@ -534,7 +534,7 @@
       if (_regTab === 'email') {
         const email = document.getElementById('regEmail').value.trim();
         if (!email || !email.includes('@')) { _regErr(1, 'נא להזין כתובת מייל תקינה'); btn.disabled=false; btn.textContent='שלח קוד →'; return; }
-        if (!EMAILJS_KEY || EMAILJS_KEY === '__EMAILJS_KEY__') throw new Error('שירות מייל לא מוגדר — הוסף secrets: EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY');
+        if (!EMAILJS_KEY || !EMAILJS_SERVICE || EMAILJS_SERVICE.startsWith('__')) throw new Error('שירות מייל לא מוגדר — הוסף secrets: EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY');
         const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
