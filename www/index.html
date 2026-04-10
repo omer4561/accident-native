@@ -1281,8 +1281,8 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   function _makeRetryPrompt(missing) {
     const lines = ['בדוק שוב בכל הטופס. לא נמצאו:'];
     if (missing.includes('date')) lines.push('• date_day/date_month/date_year — תאריך האירוע כמספרים. גם חלקי.');
-    if (missing.includes('license_plate')) lines.push('• license_plate — 6-9 ספרות. אזרחי עם מקפים, צבאי ללא. העתק הכל.');
-    if (missing.includes('driver_name')) lines.push('• driver_name — שם עברי בחלק א: (1) תחת "הנהג והרכב הצבאי", (2) בהצהרה בסיום. גם חלקי/קשה לקריאה — רשום מה שאתה רואה.');
+    if (missing.includes('license_plate')) lines.push('• license_plate — בפינה שמאל עליון של חלק א. צבאי: בדיוק 6 ספרות. אזרחי: בדיוק 9 ספרות. אם לא נראה בבירור — null.');
+    if (missing.includes('driver_name')) lines.push('• driver_name — בחלק א: (1) תחת "הנהג והרכב הצבאי", (2) בהצהרה. אם לא כתוב בבירור — null.');
     lines.push('שדה לא נמצא = null.');
     return lines.join('\n');
   }
@@ -1308,7 +1308,11 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts }], generationConfig: genConfig })
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: 'אתה קורא מסמכים. כלל אחד בלבד: אם אינך רואה ערך כתוב בבירור בטופס — החזר null. אסור בהחלט להמציא, לנחש, לדמיין, או להסיק ערכים. עדיף null מאשר ערך שגוי.' }] },
+              contents: [{ parts }],
+              generationConfig: genConfig
+            })
           }
         );
         if (!resp.ok) {
