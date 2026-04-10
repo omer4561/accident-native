@@ -1937,7 +1937,9 @@ driver_name: שם **הנהג בלבד** מהשדה "שם הנהג"/"נהג"/"מ�
         _multiGeminiResult = await analyzeWithGeminiMulti(selectedFiles, () => {});
         selectedFiles.forEach((_, i) => setProgress(i, 100, '✅ Gemini AI (רב-עמודי)'));
       } catch(e) {
-        _multiGeminiResult = null; // נפול לעיבוד בנפרד
+        console.error('Gemini multi error:', e);
+        selectedFiles.forEach((_, i) => setProgress(i, 0, `⚠️ ${e.message.slice(0,60)}`));
+        _multiGeminiResult = null;
       }
     }
 
@@ -1952,11 +1954,12 @@ driver_name: שם **הנהג בלבד** מהשדה "שם הנהג"/"נהג"/"מ�
             data = await analyzeWithGemini(file, (pct, msg) => setProgress(i, pct, msg));
             setProgress(i, 100, '✅ Gemini AI');
           } catch(geminiErr) {
+            console.error('Gemini error:', geminiErr);
             if (_ocrEngine) {
-              setProgress(i, 50, `⚠️ Gemini נכשל, עובר ל-OCR מקומי...`);
+              setProgress(i, 50, `⚠️ ${geminiErr.message.slice(0,60)} — עובר ל-OCR`);
               data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, 50 + pct/2, msg));
             } else {
-              setProgress(i, 100, '⚠️ Gemini נכשל — מלא ידנית');
+              setProgress(i, 100, `❌ ${geminiErr.message.slice(0,80)}`);
               data = { date: null, license_plate: null, driver_name: null };
             }
           }
