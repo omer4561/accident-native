@@ -526,7 +526,7 @@
     });
   }
 
-  async function compressForUpload(file, maxPx = 1200, quality = 0.75) {
+  async function compressForUpload(file, maxPx = 2500, quality = 0.95) {
     return new Promise(resolve => {
       const img = new Image(), url = URL.createObjectURL(file);
       img.onload = () => {
@@ -535,7 +535,8 @@
         const c = document.createElement('canvas');
         c.width = Math.round(img.width * scale);
         c.height = Math.round(img.height * scale);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, c.width, c.height);
         c.toBlob(b => resolve(b), 'image/jpeg', quality);
       };
       img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
@@ -1297,21 +1298,17 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     let lastErr;
     for (const model of _GEMINI_MODELS) {
       try {
-        const isPro = model.includes('pro');
-        // Pro + thinking: temperature חייב להיות 1, תקציב חשיבה 8192 טוקן
-        const genConfig = isPro
-          ? { temperature: 1, max_output_tokens: 8192, thinking_config: { thinking_budget: 8192 } }
-          : { temperature: 0, max_output_tokens: 1024, top_p: 1, top_k: 32 };
+        const genConfig = { temperature: 0, topP: 1, topK: 32, maxOutputTokens: 1024 };
         if (useSchema) {
-          genConfig.response_mime_type = 'application/json';
-          genConfig.response_schema = _GEMINI_SCHEMA;
+          genConfig.responseMimeType = 'application/json';
+          genConfig.responseSchema = _GEMINI_SCHEMA;
         }
         const resp = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts }], generation_config: genConfig })
+            body: JSON.stringify({ contents: [{ parts }], generationConfig: genConfig })
           }
         );
         if (resp.status === 429 || resp.status === 503 || resp.status === 500) {
@@ -1323,9 +1320,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
           throw new Error(`Gemini ${resp.status}: ${t.slice(0, 150)}`);
         }
         const json = await resp.json();
-        // סינון חלקי חשיבה — לקחת רק את הטקסט הסופי (לא thought parts)
-        const responseParts = json.candidates?.[0]?.content?.parts || [];
-        const text = (responseParts.find(p => !p.thought)?.text || '').trim();
+        const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
         try { return JSON.parse(text); } catch(e) {}
         const m = text.match(/\{[\s\S]*?\}/);
         if (m) return JSON.parse(m[0]);
