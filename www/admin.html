@@ -121,6 +121,7 @@
   async function hfGet(path) {
     const r = await fetch(`${HF_API}/tree/main/${path}`,
       { headers: { 'Authorization': `Bearer ${HF_TOKEN}` } });
+    if (r.status === 401 || r.status === 403) throw new Error('HF_TOKEN לא תקין — בדוק את הסוד ב-GitHub');
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data) ? data : [];
@@ -134,6 +135,10 @@
 
   async function loadReports() {
     const container = document.getElementById('reports');
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') {
+      container.innerHTML = '<div class="loading">⚠️ HF_TOKEN לא הוגדר ב-GitHub Secrets — הוסף את הסוד ופרוס מחדש</div>';
+      return;
+    }
     container.innerHTML = '<div class="loading">⏳ טוען נתונים מ-HuggingFace...</div>';
     allReports = [];
     allUsers = {};

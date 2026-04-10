@@ -506,6 +506,38 @@
     });
   }
 
+  // ===================== LOCAL IMAGE CACHE (IndexedDB) =====================
+  let _idb = null;
+  async function _openIDB() {
+    if (_idb) return _idb;
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('acc_imgs', 1);
+      r.onupgradeneeded = e => e.target.result.createObjectStore('imgs');
+      r.onsuccess = e => { _idb = e.target.result; res(_idb); };
+      r.onerror = () => rej(new Error('IDB'));
+    });
+  }
+  async function cacheLocalImg(key, base64) {
+    try {
+      const db = await _openIDB();
+      await new Promise((res, rej) => {
+        const tx = db.transaction('imgs', 'readwrite');
+        tx.objectStore('imgs').put(base64, key);
+        tx.oncomplete = res; tx.onerror = rej;
+      });
+    } catch(e) {}
+  }
+  async function getLocalImg(key) {
+    try {
+      const db = await _openIDB();
+      return await new Promise(res => {
+        const req = db.transaction('imgs').objectStore('imgs').get(key);
+        req.onsuccess = e => res(e.target.result || null);
+        req.onerror = () => res(null);
+      });
+    } catch(e) { return null; }
+  }
+
   function showRegistrationIfNeeded() {
     const p = JSON.parse(localStorage.getItem('user_profile') || 'null');
     if (!p || !p.name || !p.contact)
@@ -1004,6 +1036,13 @@
     // HF URL — ישיר, ללא קריאת קובץ מקומי
     if (r.hfUrls && r.hfUrls[idx]) {
       img.src = r.hfUrls[idx];
+      return;
+    }
+
+    // IndexedDB cache — מהיר, עובד אופליין
+    const cached = await getLocalImg(r.files[idx]);
+    if (cached) {
+      img.src = `data:image/jpeg;base64,${cached}`;
       return;
     }
 
@@ -1616,6 +1655,11 @@
         const filename = buildFilename(merged, i + 1, multiPage, '.jpg');
         const r = await saveFile(items[i].file, filename, folder.path);
         savedPaths.push(r.path);
+        // שמור תמונה ב-IndexedDB לצפייה מקומית
+        compressForUpload(items[i].file, 1200, 0.75)
+          .then(c => fileToBase64(c))
+          .then(b64 => cacheLocalImg(r.path, b64))
+          .catch(() => {});
       }
       const folderDisplay = `Accident_Reports/${folder.label}`;
       addReportToHistory(merged.license_plate, merged.date, merged.driver_name, savedPaths, folderDisplay, 'DOWNLOADS');
