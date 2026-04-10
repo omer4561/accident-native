@@ -495,7 +495,7 @@
 
   function showRegistrationIfNeeded() {
     const p = JSON.parse(localStorage.getItem('user_profile') || 'null');
-    if (!p || !p.name || !p.email)
+    if (!p || !p.name || !p.contact)
       document.getElementById('registrationOverlay').style.display = 'flex';
   }
 
@@ -583,14 +583,14 @@
 
   function editProfile() {
     const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
-    document.getElementById('regName').value = p.name || '';
-    document.getElementById('regEmail').value = p.contact || '';
-    document.getElementById('regStep1').style.display = 'block';
-    document.getElementById('regStep2').style.display = 'none';
-    document.getElementById('regSendBtn').disabled = false;
-    document.getElementById('regSendBtn').textContent = 'שלח קוד אימות →';
-    closeSettings();
-    document.getElementById('registrationOverlay').style.display = 'flex';
+    const newName = prompt('שם מלא:', p.name || '');
+    if (newName === null) return; // ביטול
+    if (!newName.trim()) { showToast('שם לא יכול להיות ריק'); return; }
+    const updated = { ...p, name: newName.trim() };
+    localStorage.setItem('user_profile', JSON.stringify(updated));
+    hfCommit(`users/${userId}.json`, JSON.stringify(updated)).catch(() => {});
+    document.getElementById('profileName').textContent = updated.name;
+    showToast('✅ פרטים עודכנו');
   }
 
   async function _uploadGroupToHF(key, localPaths, data, folder) {
