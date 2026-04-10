@@ -1290,8 +1290,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   // דגמים לפי עדיפות — מנסה כל אחד עד שמצליח
   const _GEMINI_MODELS = [
     'gemini-2.5-pro',          // ראשי — Pro, דיוק מקסימלי
-    'gemini-2.5-flash',        // fallback — Flash, מהיר יותר
-    'gemini-flash-latest'      // fallback אחרון
+    'gemini-2.5-flash'         // fallback — Flash, תומך JSON schema
   ];
 
   async function _callGeminiRaw(parts, useSchema) {
@@ -1331,8 +1330,10 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
           const json = await resp.json();
           const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
           try { return JSON.parse(text); } catch(e) {}
-          const m = text.match(/\{[\s\S]*?\}/);
-          if (m) return JSON.parse(m[0]);
+          const start = text.indexOf('{'), end = text.lastIndexOf('}');
+          if (start !== -1 && end > start) {
+            try { return JSON.parse(text.slice(start, end + 1)); } catch(e) {}
+          }
           lastErr = new Error('Gemini: תגובה לא תקינה — ' + text.slice(0, 80));
           break;
         } catch(e) {
