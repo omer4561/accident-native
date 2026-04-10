@@ -1308,14 +1308,12 @@ driver_name: שם **הנהג** שנהג ברכב — מהשדה "שם הנהג"/
   }
 
   function _normalizeResult(raw) {
-    // date: נסה לפרסר date_raw עם extractDate, fallback על date
     const rawDateStr = (raw.date_raw && raw.date_raw !== 'null') ? String(raw.date_raw).trim() : null;
     const fmtDate    = (raw.date     && raw.date     !== 'null') ? String(raw.date).trim()     : null;
     let parsedDate = null;
     if (rawDateStr) {
       try { parsedDate = extractDate(rawDateStr); } catch(e) {}
     }
-    // extractDate מחזיר DD/MM/YYYY — המר ל-DD.MM.YY
     if (parsedDate) {
       const [d,m,y] = parsedDate.split('/');
       parsedDate = `${d}.${m}.${String(y).slice(-2)}`;
@@ -1323,7 +1321,8 @@ driver_name: שם **הנהג** שנהג ברכב — מהשדה "שם הנהג"/
     return {
       date:          parsedDate || fmtDate || null,
       license_plate: (raw.license_plate && raw.license_plate !== 'null') ? String(raw.license_plate).trim() : null,
-      driver_name:   (raw.driver_name   && raw.driver_name   !== 'null') ? String(raw.driver_name).trim()   : null
+      driver_name:   (raw.driver_name   && raw.driver_name   !== 'null') ? String(raw.driver_name).trim()   : null,
+      _debug: `תאריך גולמי: "${rawDateStr||'—'}" | לוחית: "${(raw.license_plate||'—')}" | נהג: "${(raw.driver_name||'—')}"`
     };
   }
 
@@ -1981,8 +1980,9 @@ driver_name: שם **הנהג** שנהג ברכב — מהשדה "שם הנהג"/
       const merged = items.reduce((acc, item) => ({
         date: acc.date || item.data.date,
         license_plate: acc.license_plate || item.data.license_plate,
-        driver_name: acc.driver_name || item.data.driver_name
-      }), { date: null, license_plate: null, driver_name: null });
+        driver_name: acc.driver_name || item.data.driver_name,
+        _debug: acc._debug || item.data._debug
+      }), { date: null, license_plate: null, driver_name: null, _debug: null });
       window.groupsData[key] = items.map(item => ({ ...item, data: merged }));
     }
 
@@ -2014,6 +2014,7 @@ driver_name: שם **הנהג** שנהג ברכב — מהשדה "שם הנהג"/
             placeholder="לא זוהה" oninput="updateGroupData('${safeKey}','driver_name',this.value)">
         </div>
         ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים</div>` : ''}
+        ${merged._debug ? `<div style="font-size:11px;color:#999;background:#f5f5f5;border-radius:6px;padding:5px 8px;margin-bottom:8px;direction:rtl">🤖 גמיני קרא: ${merged._debug}</div>` : ''}
         <div class="pages-row">
           <button class="page-btn-all" onclick="saveGroup('${safeKey}', this)">
             💾 שמור${multiPage ? ` (${items.length} עמודים)` : ''}<br>
