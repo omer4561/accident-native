@@ -1230,33 +1230,37 @@
 
   // ===================== GEMINI VISION AI — AGENTIC MODE =====================
 
-  // Structured output schema — date_raw = כפי שנראה בטופס (ללא פרמוט), JS יפרסר
+  // Schema — יום/חודש/שנה בנפרד למניעת בלבול, לוחית כמחרוזת
   const _GEMINI_SCHEMA = {
     type: "OBJECT",
     properties: {
-      date_raw:      { type: "STRING", nullable: true },
-      license_plate: { type: "STRING", nullable: true },
-      driver_name:   { type: "STRING", nullable: true }
+      date_day:      { type: "INTEGER", nullable: true },
+      date_month:    { type: "INTEGER", nullable: true },
+      date_year:     { type: "INTEGER", nullable: true },
+      license_plate: { type: "STRING",  nullable: true },
+      driver_name:   { type: "STRING",  nullable: true }
     },
-    required: ["date_raw", "license_plate", "driver_name"]
+    required: ["date_day","date_month","date_year","license_plate","driver_name"]
   };
 
-  // פרומפט ישיר — ללא chain-of-thought, structured output מטפל בJSON
-  const _GEMINI_PROMPT = `טופס דוח תאונה צבאי ישראלי 33.1106. חלץ את שלושת השדות:
+  const _GEMINI_PROMPT = `טופס דוח תאונה צבאי ישראלי 33.1106. חלץ:
 
-date_raw: העתק את תאריך **האירוע** בדיוק כפי שכתוב (ספרות + מפרידים, למשל "07.11.24" או "7/11/2024"). חפש ליד: "תאריך", "ב-", "ביום". לא תאריך אישור/טיפול/חתימה.
+date_day / date_month / date_year: תאריך **האירוע** (לא אישור/טיפול/חתימה). חפש ליד "תאריך"/"ב-"/"ביום". החזר יום, חודש ושנה כמספרים שלמים בנפרד (שנה מלאה, למשל 2024).
 
-license_plate: לוחית הרכב המדווח. חפש ליד: "לוחית", "מספר רכב", "רישוי". אזרחית: 123-45-678. צבאית: 1234567.
+license_plate: לוחית הרכב. חפש ליד "לוחית"/"מספר רכב"/"רישוי".
+• אזרחית — בדיוק 9 ספרות עם מקפים (XXX-XX-XXX, למשל 123-45-678). העתק **את כל 9 הספרות** כולל מקפים — אל תחסיר אף ספרה.
+• צבאית — בדיוק 6 ספרות ללא מקפים (למשל 123456).
+• אל תחסיר ספרות — ספור שוב לפני שאתה מחזיר.
 
-driver_name: שם **הנהג** שנהג ברכב — מהשדה "שם הנהג"/"נהג"/"מצהיר" בלבד. לא שמות מעורבים/עדים/נפגעים אחרים.
+driver_name: שם **הנהג בלבד** מהשדה "שם הנהג"/"נהג"/"מצהיר". לא שמות מעורבים/עדים/נפגעים.
 
 שדה לא נמצא = null.`;
 
   function _makeRetryPrompt(missing) {
     const lines = ['בדוק שוב בכל הטופס. לא נמצאו:'];
-    if (missing.includes('date')) lines.push('• date_raw — כל רצף ספרות עם נקודות/קווים/רווחים. העתק כמו שכתוב.');
-    if (missing.includes('license_plate')) lines.push('• license_plate — 6-8 ספרות רצופות בכל מקום.');
-    if (missing.includes('driver_name')) lines.push('• driver_name — שם עברי מהשדה "שם הנהג". גם חלקי או קשה לקריאה.');
+    if (missing.includes('date')) lines.push('• date_day/date_month/date_year — תאריך האירוע כמספרים. גם חלקי.');
+    if (missing.includes('license_plate')) lines.push('• license_plate — 6-9 ספרות. אזרחי עם מקפים, צבאי ללא. העתק הכל.');
+    if (missing.includes('driver_name')) lines.push('• driver_name — שם עברי מ"שם הנהג". גם חלקי/קשה לקריאה.');
     lines.push('שדה לא נמצא = null.');
     return lines.join('\n');
   }
@@ -1308,21 +1312,28 @@ driver_name: שם **הנהג** שנהג ברכב — מהשדה "שם הנהג"/
   }
 
   function _normalizeResult(raw) {
-    const rawDateStr = (raw.date_raw && raw.date_raw !== 'null') ? String(raw.date_raw).trim() : null;
-    const fmtDate    = (raw.date     && raw.date     !== 'null') ? String(raw.date).trim()     : null;
+    // בנה תאריך מיום/חודש/שנה נפרדים
     let parsedDate = null;
-    if (rawDateStr) {
-      try { parsedDate = extractDate(rawDateStr); } catch(e) {}
+    const dd = parseInt(raw.date_day,   10) || 0;
+    const mm = parseInt(raw.date_month, 10) || 0;
+    const yy = parseInt(raw.date_year,  10) || 0;
+    if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yy >= 2000) {
+      parsedDate = `${String(dd).padStart(2,'0')}.${String(mm).padStart(2,'0')}.${String(yy).slice(-2)}`;
     }
-    if (parsedDate) {
-      const [d,m,y] = parsedDate.split('/');
-      parsedDate = `${d}.${m}.${String(y).slice(-2)}`;
+    // fallback: date_raw / date כמחרוזת
+    if (!parsedDate) {
+      const rawStr = (raw.date_raw && raw.date_raw !== 'null') ? String(raw.date_raw).trim() : null;
+      const fmtStr = (raw.date     && raw.date     !== 'null') ? String(raw.date).trim()     : null;
+      if (rawStr) { try { const p = extractDate(rawStr); if (p) { const [d,m,y]=p.split('/'); parsedDate=`${d}.${m}.${String(y).slice(-2)}`; } } catch(e){} }
+      if (!parsedDate && fmtStr) parsedDate = fmtStr;
     }
+    const plate = (raw.license_plate && raw.license_plate !== 'null') ? String(raw.license_plate).trim() : null;
+    const name  = (raw.driver_name   && raw.driver_name   !== 'null') ? String(raw.driver_name).trim()   : null;
     return {
-      date:          parsedDate || fmtDate || null,
-      license_plate: (raw.license_plate && raw.license_plate !== 'null') ? String(raw.license_plate).trim() : null,
-      driver_name:   (raw.driver_name   && raw.driver_name   !== 'null') ? String(raw.driver_name).trim()   : null,
-      _debug: `תאריך גולמי: "${rawDateStr||'—'}" | לוחית: "${(raw.license_plate||'—')}" | נהג: "${(raw.driver_name||'—')}"`
+      date:          parsedDate,
+      license_plate: plate,
+      driver_name:   name,
+      _debug: `יום:${dd||'?'} חודש:${mm||'?'} שנה:${yy||'?'} | לוחית:"${plate||'—'}" | נהג:"${name||'—'}"`
     };
   }
 
@@ -1569,13 +1580,20 @@ driver_name: שם **הנהג** שנהג ברכב — מהשדה "שם הנהג"/
   // מחלץ לוחית רישוי מטקסט נתון
   function extractPlate(text) {
     const pats = [
-      /(?<!\d)(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})(?!\d)/,  // 123-45-678
-      /(?<!\d)(\d{2,3})[ \t](\d{2,3})[ \t](\d{2,3})(?!\d)/,             // 123 45 678
-      /(?<!\d)(\d{7,8})(?!\d)/,                                           // 12345678 צבאי
+      // אזרחי — 9 ספרות עם מקפים (XXX-XX-XXX)
+      { rx: /(?<!\d)(\d{3})\s*[-–]\s*(\d{2})\s*[-–]\s*(\d{3})(?!\d)/, fmt: m => `${m[1]}-${m[2]}-${m[3]}` },
+      // אזרחי — 9 ספרות ברווחים
+      { rx: /(?<!\d)(\d{3})[ \t](\d{2})[ \t](\d{3})(?!\d)/,            fmt: m => `${m[1]}-${m[2]}-${m[3]}` },
+      // אזרחי ישן — 7-8 ספרות עם מקפים (XX-XXX-XX וכד')
+      { rx: /(?<!\d)(\d{2,3})\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})(?!\d)/, fmt: m => `${m[1]}-${m[2]}-${m[3]}` },
+      // צבאי — 6 ספרות בדיוק
+      { rx: /(?<!\d)(\d{6})(?!\d)/,                                      fmt: m => m[1] },
+      // 9 ספרות צמודות (אזרחי ללא מקפים)
+      { rx: /(?<!\d)(\d{9})(?!\d)/,                                      fmt: m => `${m[1].slice(0,3)}-${m[1].slice(3,5)}-${m[1].slice(5)}` },
     ];
-    for (const rx of pats) {
+    for (const { rx, fmt } of pats) {
       const m = text.match(rx);
-      if (m) return m[2] ? `${m[1]}-${m[2]}-${m[3]}` : m[1];
+      if (m) return fmt(m);
     }
     return null;
   }
