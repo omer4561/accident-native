@@ -1288,13 +1288,13 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
 
   // דגמים לפי עדיפות — מנסה כל אחד עד שמצליח
   const _GEMINI_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-flash-latest'
+    'gemini-2.5-pro',          // ראשי — Pro, דיוק מקסימלי
+    'gemini-2.5-flash',        // fallback — Flash, מהיר יותר
+    'gemini-flash-latest'      // fallback אחרון
   ];
 
   async function _callGeminiRaw(parts, useSchema) {
-    const genConfig = { temperature: 0, max_output_tokens: 512 };
+    const genConfig = { temperature: 0, max_output_tokens: 1024 };
     if (useSchema) {
       genConfig.response_mime_type = 'application/json';
       genConfig.response_schema = _GEMINI_SCHEMA;
