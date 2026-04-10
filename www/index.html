@@ -1294,14 +1294,18 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   ];
 
   async function _callGeminiRaw(parts, useSchema) {
-    const genConfig = { temperature: 0, max_output_tokens: 1024 };
-    if (useSchema) {
-      genConfig.response_mime_type = 'application/json';
-      genConfig.response_schema = _GEMINI_SCHEMA;
-    }
     let lastErr;
     for (const model of _GEMINI_MODELS) {
       try {
+        const isPro = model.includes('pro');
+        // Pro + thinking: temperature חייב להיות 1, תקציב חשיבה 8192 טוקן
+        const genConfig = isPro
+          ? { temperature: 1, max_output_tokens: 8192, thinking_config: { thinking_budget: 8192 } }
+          : { temperature: 0, max_output_tokens: 1024 };
+        if (useSchema) {
+          genConfig.response_mime_type = 'application/json';
+          genConfig.response_schema = _GEMINI_SCHEMA;
+        }
         const resp = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
           {
@@ -1312,14 +1316,16 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
         );
         if (resp.status === 429 || resp.status === 503 || resp.status === 500) {
           lastErr = new Error(`Gemini ${model} ${resp.status}`);
-          continue; // נסה דגם הבא
+          continue;
         }
         if (!resp.ok) {
           const t = await resp.text();
           throw new Error(`Gemini ${resp.status}: ${t.slice(0, 150)}`);
         }
         const json = await resp.json();
-        const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+        // סינון חלקי חשיבה — לקחת רק את הטקסט הסופי (לא thought parts)
+        const responseParts = json.candidates?.[0]?.content?.parts || [];
+        const text = (responseParts.find(p => !p.thought)?.text || '').trim();
         try { return JSON.parse(text); } catch(e) {}
         const m = text.match(/\{[\s\S]*?\}/);
         if (m) return JSON.parse(m[0]);
