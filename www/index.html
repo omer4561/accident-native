@@ -307,7 +307,7 @@
     <div class="panel-content" id="panelContent"></div>
     <div style="padding:12px;border-top:1px solid #eee;flex-shrink:0">
       <button onclick="openSettings()" style="width:100%;padding:10px;background:#f1f3f4;border:none;border-radius:10px;font-size:14px;cursor:pointer;color:#444">⚙️ הגדרות</button>
-      <button onclick="location.href='https://omer4561.github.io/accident-native/admin.html?t='+APP_TS" style="width:100%;padding:10px;background:#e8f0fe;border:none;border-radius:10px;font-size:14px;cursor:pointer;color:#1a73e8;margin-top:6px">🛡️ ניהול מנהל</button>
+      <button onclick="openAdminPanel()" style="width:100%;padding:10px;background:#e8f0fe;border:none;border-radius:10px;font-size:14px;cursor:pointer;color:#1a73e8;margin-top:6px">🛡️ ניהול מנהל</button>
       <button onclick="exportCSV()" class="btn-export">📊 ייצא CSV</button>
       <div id="appVersionLine" style="text-align:center;font-size:11px;color:#aaa;margin-top:8px"></div>
     </div>
@@ -315,6 +315,42 @@
 </div>
 
 <div id="saveToast"></div>
+
+<!-- Admin Panel -->
+<div id="adminPanel" style="display:none;position:fixed;inset:0;z-index:25000;background:#f0f2f5;flex-direction:column;overflow:hidden">
+  <div style="background:#1a73e8;color:#fff;padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onclick="closeAdminPanel()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:4px 10px;border-radius:6px;font-size:18px;cursor:pointer;line-height:1">‹</button>
+      <span style="font-size:17px;font-weight:bold">🚗 ניהול דוחות תאונה</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="adminHeaderStatus" style="font-size:13px;opacity:0.85"></span>
+      <button onclick="adminLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer">יציאה</button>
+    </div>
+  </div>
+  <div id="adminLoginOverlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,0.7);z-index:10;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:16px;padding:36px 32px;text-align:center;width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">
+      <h2 style="margin-bottom:20px;color:#1a73e8;font-size:20px">🔐 כניסת מנהל</h2>
+      <input type="password" id="adminPassInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')checkAdminLogin()" style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;margin-bottom:12px;text-align:center;letter-spacing:2px;box-sizing:border-box">
+      <button onclick="checkAdminLogin()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer">כניסה</button>
+      <div id="adminLoginError" style="color:#c5221f;font-size:13px;margin-top:10px;min-height:18px"></div>
+    </div>
+  </div>
+  <div style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fff;border-bottom:1px solid #e0e0e0;flex-shrink:0">
+    <select id="adminFilterUser" onchange="applyAdminFilter()" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;min-width:140px"><option value="">כל המשתמשים</option></select>
+    <input type="text" id="adminFilterSearch" placeholder="חפש לוחית / תאריך / נהג..." oninput="applyAdminFilter()" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;flex:1;min-width:160px">
+    <button onclick="loadAdminReports()" style="padding:8px 14px;background:#1a73e8;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🔄 רענן</button>
+    <button onclick="exportAdminCSV()" style="padding:8px 14px;background:#34a853;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">📊 CSV</button>
+  </div>
+  <div id="adminStatsBar" style="padding:8px 16px;background:#e8f0fe;font-size:13px;color:#333;flex-shrink:0"></div>
+  <div id="adminReports" style="flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;align-content:start">
+    <div style="text-align:center;padding:48px;color:#888;grid-column:1/-1">⏳ טוען...</div>
+  </div>
+</div>
+<div id="adminLightbox" onclick="closeAdminLightbox()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:30000;align-items:center;justify-content:center">
+  <button onclick="event.stopPropagation();closeAdminLightbox()" style="position:absolute;top:16px;left:16px;background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:24px;cursor:pointer;border-radius:50%;width:44px;height:44px">✕</button>
+  <img id="adminLightboxImg" src="" style="max-width:95vw;max-height:90vh;object-fit:contain;border-radius:8px">
+</div>
 
 <!-- Image viewer overlay -->
 
@@ -1847,6 +1883,148 @@
 
   // ===================== REGISTRATION CHECK ON LOAD =====================
   document.addEventListener('DOMContentLoaded', showRegistrationIfNeeded);
+
+  // ===================== ADMIN PANEL =====================
+  const ADMIN_PASS = 'admin2025';
+  const ADMIN_AUTH_KEY = 'admin_authed';
+  const HF_OWNER = 'omer4561';
+  const HF_REPO  = 'accident-reports';
+  const HF_API   = `https://huggingface.co/api/datasets/${HF_OWNER}/${HF_REPO}`;
+  const HF_FILES = `https://huggingface.co/datasets/${HF_OWNER}/${HF_REPO}/resolve/main`;
+
+  let _adminReports = [], _adminUsers = {};
+
+  function openAdminPanel() {
+    document.getElementById('sidePanel').classList.remove('open');
+    const panel = document.getElementById('adminPanel');
+    panel.style.display = 'flex';
+    if (localStorage.getItem(ADMIN_AUTH_KEY) !== '1') {
+      const ov = document.getElementById('adminLoginOverlay');
+      ov.style.display = 'flex';
+      setTimeout(() => document.getElementById('adminPassInput').focus(), 100);
+    } else {
+      loadAdminReports();
+    }
+  }
+
+  function closeAdminPanel() {
+    document.getElementById('adminPanel').style.display = 'none';
+  }
+
+  function checkAdminLogin() {
+    const val = document.getElementById('adminPassInput').value;
+    if (val === ADMIN_PASS) {
+      localStorage.setItem(ADMIN_AUTH_KEY, '1');
+      document.getElementById('adminLoginOverlay').style.display = 'none';
+      document.getElementById('adminPassInput').value = '';
+      loadAdminReports();
+    } else {
+      document.getElementById('adminLoginError').textContent = '❌ סיסמה שגויה';
+      document.getElementById('adminPassInput').value = '';
+    }
+  }
+
+  function adminLogout() {
+    localStorage.removeItem(ADMIN_AUTH_KEY);
+    document.getElementById('adminLoginOverlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('adminPassInput').focus(), 100);
+  }
+
+  async function _hfGet(path) {
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') return [];
+    const r = await fetch(`${HF_API}/tree/main/${path}`, { headers: { 'Authorization': `Bearer ${HF_TOKEN}` } });
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function _hfReadJson(p) {
+    const r = await fetch(`${HF_FILES}/${p}?token=${HF_TOKEN}`);
+    if (!r.ok) return null;
+    return r.json();
+  }
+
+  async function loadAdminReports() {
+    const container = document.getElementById('adminReports');
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') {
+      container.innerHTML = '<div style="text-align:center;padding:48px;color:#c00;grid-column:1/-1">⚠️ HF_TOKEN לא הוגדר — פרוס מחדש</div>';
+      return;
+    }
+    container.innerHTML = '<div style="text-align:center;padding:48px;color:#888;grid-column:1/-1">⏳ טוען נתונים...</div>';
+    _adminReports = []; _adminUsers = {};
+    try {
+      const userFiles = await _hfGet('users');
+      for (const f of userFiles.filter(x => x.type === 'file' && x.path.endsWith('.json'))) {
+        try { const u = await _hfReadJson(f.path); if (u && u.userId) _adminUsers[u.userId] = u; } catch(e) {}
+      }
+      const userDirs = await _hfGet('data');
+      for (const dir of userDirs.filter(x => x.type === 'directory')) {
+        const dirName = dir.path.replace('data/', '');
+        const files = await _hfGet(`data/${dirName}`);
+        for (const f of files.filter(x => x.type === 'file' && x.path.endsWith('.json'))) {
+          try { const meta = await _hfReadJson(f.path); if (meta) _adminReports.push(meta); } catch(e) {}
+        }
+      }
+      _adminReports.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+      const users = {};
+      _adminReports.forEach(r => { if (r.userName) users[r.userId] = r.userName; });
+      const sel = document.getElementById('adminFilterUser');
+      sel.innerHTML = '<option value="">כל המשתמשים</option>';
+      Object.entries(users).forEach(([uid, name]) => {
+        sel.insertAdjacentHTML('beforeend', `<option value="${uid}">${name}</option>`);
+      });
+      document.getElementById('adminHeaderStatus').textContent = `${_adminReports.length} דוחות · ${Object.keys(users).length} משתמשים`;
+      applyAdminFilter();
+    } catch(e) {
+      container.innerHTML = `<div style="text-align:center;padding:48px;color:#c00;grid-column:1/-1">❌ שגיאה: ${e.message}</div>`;
+    }
+  }
+
+  function applyAdminFilter() {
+    const uid = document.getElementById('adminFilterUser').value;
+    const q = document.getElementById('adminFilterSearch').value.trim().toLowerCase();
+    const filtered = _adminReports.filter(r => {
+      if (uid && r.userId !== uid) return false;
+      if (q && !`${r.plate} ${r.date} ${r.driver} ${r.userName}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const container = document.getElementById('adminReports');
+    document.getElementById('adminStatsBar').textContent = filtered.length ? `מציג ${filtered.length} מתוך ${_adminReports.length} דוחות` : '';
+    if (!filtered.length) { container.innerHTML = '<div style="text-align:center;padding:48px;color:#aaa;grid-column:1/-1">📭 אין דוחות תואמים</div>'; return; }
+    container.innerHTML = filtered.map(meta => {
+      const imgs = (meta.urls || []).map((u, i) =>
+        `<img src="${u}" loading="lazy" alt="עמוד ${i+1}" onclick="openAdminLightbox('${u.replace(/'/g,"\\'")}');event.stopPropagation()" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;cursor:pointer">`
+      ).join('');
+      const savedDate = meta.savedAt ? new Date(meta.savedAt).toLocaleString('he-IL') : '';
+      return `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <span style="font-weight:bold;font-size:16px;color:#1a73e8">🚗 ${meta.plate || 'לא זוהה'}</span>
+          <span style="font-size:12px;color:#888">${savedDate}</span>
+        </div>
+        <div style="font-size:13px;color:#555;margin-bottom:8px">📅 ${meta.date || 'ללא תאריך'} &nbsp; 👤 ${meta.driver || 'לא זוהה'}</div>
+        <div style="font-size:12px;background:#f8f9fa;border-radius:6px;padding:6px 8px;color:#444;margin-bottom:8px">👨‍💼 ${meta.userName || 'לא ידוע'} &nbsp;|&nbsp; 📞 ${meta.userContact || '—'}</div>
+        ${imgs ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px">${imgs}</div>` : '<div style="color:#aaa;font-size:12px">אין תמונות</div>'}
+      </div>`;
+    }).join('');
+  }
+
+  function openAdminLightbox(url) {
+    document.getElementById('adminLightboxImg').src = url;
+    document.getElementById('adminLightbox').style.display = 'flex';
+  }
+  function closeAdminLightbox() {
+    document.getElementById('adminLightbox').style.display = 'none';
+    document.getElementById('adminLightboxImg').src = '';
+  }
+
+  function exportAdminCSV() {
+    if (!_adminReports.length) { alert('אין נתונים לייצוא'); return; }
+    const rows = [['לוחית','תאריך','נהג','שם משתמש','טלפון/מייל','נשמר ב']];
+    for (const r of _adminReports) rows.push([r.plate||'',r.date||'',r.driver||'',r.userName||'',r.userContact||'',r.savedAt||'']);
+    const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})), download: 'admin_reports.csv' });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
 </script>
 </body>
 </html>
