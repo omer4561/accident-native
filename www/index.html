@@ -812,6 +812,13 @@
     requestAnimationFrame(() => { document.getElementById('updateBar').style.width = '100%'; });
   }
 
+  // רישום Service Worker שמנקה cache ומכריח טעינה מהרשת תמיד
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/accident-native/sw.js?v=' + APP_TS)
+      .then(reg => reg.update())
+      .catch(() => {});
+  }
+
   (async function checkUpdate() {
     if (location.href.startsWith('capacitor://')) {
       location.href = 'https://omer4561.github.io/accident-native';
@@ -827,7 +834,12 @@
       const stored = parseInt(localStorage.getItem('app_ts') || '0', 10);
       if (ts && ts > stored) {
         localStorage.setItem('app_ts', String(ts));
-        if (stored > 0) { // לא בפתיחה הראשונה אי פעם
+        if (stored > 0) {
+          // נקה את כל ה-cache לפני רענון
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k => caches.delete(k)));
+          }
           _showUpdateOverlay();
           setTimeout(() => location.reload(true), 1800);
         }

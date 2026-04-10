@@ -27,6 +27,7 @@ jobs:
         run: |
           TS=$(date -u +%s)
           sed -i "s/const APP_TS = [0-9]*/const APP_TS = $TS/" www/index.html
+          sed -i "s/__APP_TS__/$TS/" www/sw.js
           GKEY="${{ secrets.GEMINI_KEY }}"
           if [ -n "$GKEY" ]; then
             sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
