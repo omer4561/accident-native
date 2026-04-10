@@ -1384,13 +1384,15 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     // fallback אחרון: שדה date ישן
     if (!parsedDate && raw.date && raw.date !== 'null') parsedDate = String(raw.date).trim();
 
-    const plate = _validatePlate(raw.license_plate);
-    const name  = _validateName(raw.driver_name);
+    const rawPlate = (raw.license_plate && raw.license_plate !== 'null') ? String(raw.license_plate).trim() : null;
+    const rawName  = (raw.driver_name  && raw.driver_name  !== 'null') ? String(raw.driver_name).trim()  : null;
+    const plate = _validatePlate(rawPlate);
+    const name  = _validateName(rawName);
     return {
       date:          parsedDate,
       license_plate: plate,
       driver_name:   name,
-      _debug: `יום:${dd||'?'} חודש:${mm||'?'} שנה:${yy||'?'} | גולמי:"${rawStr||'—'}" | לוחית:"${plate||'—'}" | נהג:"${name||'—'}"`
+      _debug: `יום:${dd||'?'} חודש:${mm||'?'} שנה:${yy||'?'} | גולמי:"${rawStr||'—'}" | לוחית-גולמי:"${rawPlate||'—'}" לוחית-אחרי:"${plate||'—'}" | נהג-גולמי:"${rawName||'—'}" נהג-אחרי:"${name||'—'}"`
     };
   }
 
