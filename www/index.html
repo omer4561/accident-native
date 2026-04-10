@@ -277,6 +277,29 @@
   </div>
 </div>
 
+<!-- Edit Profile Modal -->
+<div id="editProfileOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:11000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;width:min(92vw,360px);box-shadow:0 8px 32px rgba(0,0,0,0.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-weight:bold;font-size:17px;color:#1a73e8">✏️ עריכת פרטים</div>
+      <button onclick="closeEditProfile()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#555">✕</button>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:13px;color:#555;display:block;margin-bottom:4px">שם מלא</label>
+      <input id="editName" type="text" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:13px;color:#555;display:block;margin-bottom:4px">מייל</label>
+      <input id="editEmail" type="email" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:13px;color:#555;display:block;margin-bottom:4px">טלפון</label>
+      <input id="editPhone" type="tel" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box">
+    </div>
+    <button onclick="saveEditProfile()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:bold">שמור שינויים</button>
+  </div>
+</div>
+
 <!-- History side panel -->
 <div class="overlay" id="historyOverlay" onclick="overlayClick(event)">
   <div class="side-panel">
@@ -583,13 +606,36 @@
 
   function editProfile() {
     const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
-    const newName = prompt('שם מלא:', p.name || '');
-    if (newName === null) return; // ביטול
-    if (!newName.trim()) { showToast('שם לא יכול להיות ריק'); return; }
-    const updated = { ...p, name: newName.trim() };
+    document.getElementById('editName').value = p.name || '';
+    const contact = p.contact || '';
+    if (contact.includes('@')) {
+      document.getElementById('editEmail').value = contact;
+      document.getElementById('editPhone').value = '';
+    } else {
+      document.getElementById('editPhone').value = contact;
+      document.getElementById('editEmail').value = '';
+    }
+    closeSettings();
+    document.getElementById('editProfileOverlay').style.display = 'flex';
+  }
+
+  function closeEditProfile() {
+    document.getElementById('editProfileOverlay').style.display = 'none';
+  }
+
+  function saveEditProfile() {
+    const name = document.getElementById('editName').value.trim();
+    const email = document.getElementById('editEmail').value.trim();
+    const phone = document.getElementById('editPhone').value.trim();
+    if (!name) { showToast('שם לא יכול להיות ריק'); return; }
+    const contact = email || phone;
+    const p = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    const updated = { ...p, name, contact };
     localStorage.setItem('user_profile', JSON.stringify(updated));
     hfCommit(`users/${userId}.json`, JSON.stringify(updated)).catch(() => {});
-    document.getElementById('profileName').textContent = updated.name;
+    document.getElementById('profileName').textContent = name;
+    document.getElementById('profileId').textContent = contact;
+    closeEditProfile();
     showToast('✅ פרטים עודכנו');
   }
 
