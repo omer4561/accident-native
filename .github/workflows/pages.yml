@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   deploy:
@@ -51,15 +53,8 @@ jobs:
           echo "version.json: $(cat www/version.json)"
 
       - name: Deploy www/ to gh-pages branch
-        run: |
-          cp -r www /tmp/deploy
-          cd /tmp/deploy
-          touch .nojekyll
-          git init
-          git config user.email "actions@github.com"
-          git config user.name "GitHub Actions"
-          git add -A
-          git commit -m "deploy [skip ci]"
-          git push --force \
-            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
-            HEAD:gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./www
+          force_orphan: true
