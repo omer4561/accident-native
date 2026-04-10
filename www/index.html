@@ -539,7 +539,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ service_id: EMAILJS_SERVICE, template_id: EMAILJS_TEMPLATE, user_id: EMAILJS_KEY,
-            template_params: { to_email: email, otp_code: code, user_name: name } })
+            template_params: { to_email: email, name: name, message: `קוד האימות שלך: ${code}\n\nהקוד בתוקף ל-10 דקות.`, time: new Date().toLocaleString('he-IL') } })
         });
         if (!res.ok) throw new Error(`EmailJS ${res.status}: ${await res.text()}`);
         localStorage.setItem('pending_otp', JSON.stringify({ code, contact: email, name, expiry: Date.now() + 600000 }));
