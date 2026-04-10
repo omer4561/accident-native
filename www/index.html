@@ -1407,7 +1407,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     onProg?.(80, '🤖 בודק שדות חסרים...');
 
     // retry ממוקד על שדות חסרים
-    const imgParts = parts.filter(p => p.inline_data);
+    const imgParts = parts.filter(p => p.inlineData);
     const missing  = ['date','license_plate','driver_name'].filter(k => !result[k]);
     if (missing.length && imgParts.length) {
       try {
@@ -1455,7 +1455,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     const base64 = await fileToBase64(compressed);
     return _callGemini([
       { text: _GEMINI_PROMPT },
-      { inline_data: { mime_type: 'image/jpeg', data: base64 } }
+      { inlineData: { mimeType: 'image/jpeg', data: base64 } }
     ], onProg);
   }
 
@@ -1465,7 +1465,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     for (const file of files) {
       const compressed = await compressForUpload(file, 2500, 0.95);
       const base64 = await fileToBase64(compressed);
-      parts.push({ inline_data: { mime_type: 'image/jpeg', data: base64 } });
+      parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
     }
     return _callGemini(parts, onProg);
   }
