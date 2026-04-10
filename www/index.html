@@ -1403,6 +1403,27 @@ driver_name: שם פרטי + שם משפחה בעברית של הנהג מהשד
         result.date          = result.date          || r2.date;
         result.license_plate = result.license_plate || r2.license_plate;
         result.driver_name   = result.driver_name   || r2.driver_name;
+        if (r2._debug) result._debug = r2._debug;
+      } catch(e) {}
+    }
+
+    // retry ייעודי לתאריך — עד 3 ניסיונות נוספים
+    const _DATE_FOCUS_PROMPT = `התגובה הקודמת לא תקינה — תאריך לא נמצא.
+עבור על כל הדף מחדש, שורה אחר שורה. חפש כל מחרוזת עם ספרות ונקודות/קווים/לשון.
+קרא כל תאריך שאתה רואה משמאל לימין: קבוצה שמאלית=יום, אמצעית=חודש, ימנית=שנה.
+שנה קצרה (2 ספרות) היא תמיד 2000+. שנה חייבת להיות 2017 ומעלה — אחרת טעות.
+החזר date_raw: העתק מדויק של המחרוזת שמצאת. החזר date_day, date_month, date_year כמספרים.`;
+
+    for (let attempt = 1; attempt <= 3 && !result.date && imgParts.length; attempt++) {
+      onProg?.(80 + attempt * 4, `⚠️ תאריך לא תקין — ניסיון ${attempt + 1}...`);
+      try {
+        const rDate = _normalizeResult(await _callGeminiRaw(
+          [{ text: _DATE_FOCUS_PROMPT }, ...imgParts], true
+        ));
+        if (rDate.date) {
+          result.date   = rDate.date;
+          result._debug = rDate._debug;
+        }
       } catch(e) {}
     }
 
