@@ -1230,18 +1230,18 @@
 
   // ===================== GEMINI VISION AI — AGENTIC MODE =====================
 
-  // Structured output schema — מאלץ Gemini להחזיר JSON תקני תמיד
+  // Structured output schema — date_raw = כפי שנראה בטופס (ללא פרמוט), JS יפרסר
   const _GEMINI_SCHEMA = {
     type: "OBJECT",
     properties: {
-      date:          { type: "STRING", nullable: true },
+      date_raw:      { type: "STRING", nullable: true },
       license_plate: { type: "STRING", nullable: true },
       driver_name:   { type: "STRING", nullable: true }
     },
-    required: ["date", "license_plate", "driver_name"]
+    required: ["date_raw", "license_plate", "driver_name"]
   };
 
-  // פרומפט אחד — Gemini קורא, חושב, ואז מחזיר JSON בסוף
+  // פרומפט — Gemini מעתיק מה שהוא רואה, לא מפרמט
   const _GEMINI_PROMPT = `אתה מומחה לקריאת טפסי דוחות תאונה צבאיים ישראלים (33.1106).
 
 תהליך:
@@ -1251,11 +1251,12 @@
    - לוחית רישוי (ליד "לוחית" / "מספר רכב" / "רישוי" — 7-8 ספרות)
    - שם הנהג (ליד "שם הנהג" / "נהג" / "מצהיר" / "שם:" — שם פרטי + משפחה)
 3. בסוף כתוב שורה אחת של JSON:
-   RESULT: {"date":"DD.MM.YY","license_plate":"...","driver_name":"..."}
+   RESULT: {"date_raw":"...","license_plate":"...","driver_name":"..."}
 
 חוקים:
-• תאריך — פורמט פלט: DD.MM.YY בלבד (שנה 2 ספרות, דוגמה: 07.11.24)
+• date_raw — העתק את התאריך **בדיוק כפי שכתוב בטופס** (ספרות ומפרידים בלבד, למשל: "07.11.24" או "7/11/2024" או "071124"). אל תפרמט ואל תשנה — רק העתק.
 • לוחית אזרחית — עם מקפים (123-45-678), צבאית — ספרות בלבד (1234567)
+• driver_name — שם **הנהג בלבד** שנהג ברכב המדווח. בטופס 33.1106 שם הנהג מופיע בשדה "שם הנהג" / "נהג" / "מצהיר". אל תחזיר שמות של מעורבים אחרים, עדים, או נפגעים — גם אם שמותיהם מופיעים יותר פעמים.
 • שדה לא נמצא — null`;
 
   function _makeRetryPrompt(missing) {
@@ -1314,8 +1315,20 @@
   }
 
   function _normalizeResult(raw) {
+    // date: נסה לפרסר date_raw עם extractDate, fallback על date
+    const rawDateStr = (raw.date_raw && raw.date_raw !== 'null') ? String(raw.date_raw).trim() : null;
+    const fmtDate    = (raw.date     && raw.date     !== 'null') ? String(raw.date).trim()     : null;
+    let parsedDate = null;
+    if (rawDateStr) {
+      try { parsedDate = extractDate(rawDateStr); } catch(e) {}
+    }
+    // extractDate מחזיר DD/MM/YYYY — המר ל-DD.MM.YY
+    if (parsedDate) {
+      const [d,m,y] = parsedDate.split('/');
+      parsedDate = `${d}.${m}.${String(y).slice(-2)}`;
+    }
     return {
-      date:          (raw.date          && raw.date          !== 'null') ? String(raw.date).trim()          : null,
+      date:          parsedDate || fmtDate || null,
       license_plate: (raw.license_plate && raw.license_plate !== 'null') ? String(raw.license_plate).trim() : null,
       driver_name:   (raw.driver_name   && raw.driver_name   !== 'null') ? String(raw.driver_name).trim()   : null
     };
