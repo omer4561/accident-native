@@ -1241,47 +1241,38 @@
     required: ["date", "license_plate", "driver_name"]
   };
 
-  // פרומפט ראשי — סוכן שמקבל משימה ומבצע אותה שלב אחר שלב
-  const _GEMINI_PROMPT = `אתה סוכן חילוץ נתונים מומחה לטפסי דוחות תאונה צבאיים ישראלים (טופס 33.1106).
-קיבלת תמונה של טופס (עמוד אחד או שניים). המשימה שלך: לחלץ בדיוק מרבי 3 שדות.
+  // שלב 1: פרומפט תמלול — הועתק מלא של כל הטקסט שנראה בתמונה
+  const _PROMPT_TRANSCRIBE = `תמלל את כל הטקסט שאתה רואה בתמונה זו (טופס דוח תאונה צבאי ישראלי 33.1106).
+כתוב את כל הטקסט — מודפס וכתב יד — שורה אחר שורה, בדיוק כפי שהוא מופיע.
+אל תפרש ואל תסכם — רק העתק את כל הטקסט.`;
 
-בצע את השלבים הבאים בסדר:
+  // שלב 2: פרומפט חילוץ — מחלץ שדות מהתמלול
+  function _makeExtractPrompt(transcription) {
+    return `להלן תמלול של טופס דוח תאונה צבאי ישראלי (33.1106):
 
-שלב א — סרוק את כל הטופס מהתחלה ועד הסוף וזהה את כל הטקסט הנראה.
+--- תחילת תמלול ---
+${transcription}
+--- סוף תמלול ---
 
-שלב ב — חפש תאריך האירוע:
-• אזורים: פינה שמאלית-עליונה, שדות "תאריך", "ב-", "ביום", "תאריך התאונה", "תאריך האירוע"
-• פורמטים: DD.MM.YY | DD.MM.YYYY | DD/MM/YY | DD/MM/YYYY | DD\\MM\\YY | DD-MM-YY | DD MM YY | D.M.YY | DDMMYY | DDMMYYYY
-• בעיות OCR: I/l/ı במקום / , O/o במקום 0, רווחים מיותרים בין ספרות, נקודה כפולה, מקף במקום נקודה
-• כמה תאריכים? → קח תאריך **האירוע** בלבד (לא טיפול/חתימה/אישור)
-• פלט: DD.MM.YY בדיוק (שנה 2 ספרות, לדוגמה: 07.11.24)
+מתוך התמלול, חלץ את שלושת השדות הבאים:
 
-שלב ג — חפש לוחית רישוי:
-• ליד: "לוחית", "מספר רכב", "מס' רישום", "רישוי", "כלי הרכב", "מספר"
-• אזרחית: XXX-XX-XXX עד X-XX-XXX (7-8 ספרות + מקפים, לדוגמה: 123-45-678)
-• צבאית: 7-8 ספרות רצופות ללא מקפים (לדוגמה: 1234567)
-• OCR הסיר מקפים? → שחזר לפי מספר הספרות (7 ספרות: XXX-XX-XX, 8 ספרות: XXX-XX-XXX)
-• פלט: לוחית עם מקפים אם אזרחית | ספרות בלבד אם צבאית | null
+1. תאריך האירוע (date):
+   • חפש ליד: "תאריך", "ב-", "ביום", "תאריך התאונה"
+   • פורמטים: DD.MM.YY | DD.MM.YYYY | DD/MM/YY | DD/MM/YYYY | DD-MM-YY | DD MM YY | DDMMYY
+   • אם יש כמה תאריכים — קח את תאריך **האירוע** (לא טיפול/אישור/חתימה)
+   • החזר בפורמט DD.MM.YY בלבד (שנה 2 ספרות, דוגמה: 07.11.24)
 
-שלב ד — חפש שם הנהג:
-• ליד: "שם הנהג", "שם מלא", "נהג", "שם:", "מצהיר", "בעל הרכב", "שם ומשפחה"
-• שם מלא בעברית — שם פרטי + שם משפחה
-• כתב יד קשה? → נסה לזהות אות אחר אות, הסק מהאותיות שנראות
-• פלט: "שם משפחה" | null
+2. לוחית רישוי (license_plate):
+   • חפש ליד: "לוחית", "מספר רכב", "מס' רישום", "רישוי"
+   • אזרחית: 7-8 ספרות עם מקפים (דוגמה: 123-45-678)
+   • צבאית: 7-8 ספרות רצופות (דוגמה: 1234567)
 
-החזר JSON בלבד עם השדות: date, license_plate, driver_name`;
+3. שם הנהג (driver_name):
+   • חפש ליד: "שם הנהג", "נהג", "שם מלא", "מצהיר", "שם:"
+   • שם פרטי + שם משפחה בעברית
 
-  // פרומפט retry — ממוקד לשדות שנכשלו
-  function _makeRetryPrompt(missing) {
-    const lines = ['בדוק את הטופס שוב בקפידה. השדות הבאים לא נמצאו — חפש אותם בכל מקום בטופס:'];
-    if (missing.includes('date'))
-      lines.push('• תאריך: חפש כל רצף של ספרות עם מפרידים (נקודות/קווים/רווחים/אלכסונים). גם תאריך חלקי מקובל.');
-    if (missing.includes('license_plate'))
-      lines.push('• לוחית: חפש 7-8 ספרות ברצוף. אפילו ספרות ללא מקפים — אם יש 7-8 ספרות זו לוחית.');
-    if (missing.includes('driver_name'))
-      lines.push('• שם נהג: חפש שם עברי כלשהו בטופס — גם שם חלקי, גם כתב יד קשה לקריאה.');
-    lines.push('החזר JSON עם כל מה שמצאת. עדיף ניחוש מבוסס על null.');
-    return lines.join('\n');
+החזר JSON בלבד: {"date":"...","license_plate":"...","driver_name":"..."}
+שדה שלא נמצא = null`;
   }
 
   // דגמים לפי עדיפות — מנסה כל אחד עד שמצליח
@@ -1338,38 +1329,62 @@
     };
   }
 
-  // retry ממוקד: קריאה שנייה רק על שדות שחסרים
-  async function _retryMissingFields(result, imageParts) {
-    const missing = ['date','license_plate','driver_name'].filter(k => !result[k]);
-    if (!missing.length) return result;
-    try {
-      const retryParts = [{ text: _makeRetryPrompt(missing) }, ...imageParts];
-      const raw2 = await _callGeminiRaw(retryParts, true);
-      const r2 = _normalizeResult(raw2);
-      return {
-        date:          result.date          || r2.date,
-        license_plate: result.license_plate || r2.license_plate,
-        driver_name:   result.driver_name   || r2.driver_name
-      };
-    } catch(e) { return result; }
+  // קריאה פשוטה לטקסט (ללא schema)
+  async function _callGeminiText(parts) {
+    let lastErr;
+    for (const model of _GEMINI_MODELS) {
+      try {
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts }], generation_config: { temperature: 0, max_output_tokens: 2048 } })
+          }
+        );
+        if (resp.status === 429 || resp.status === 503 || resp.status === 500) {
+          lastErr = new Error(`${model} ${resp.status}`); continue;
+        }
+        if (!resp.ok) { const t = await resp.text(); throw new Error(`Gemini ${resp.status}: ${t.slice(0,100)}`); }
+        const json = await resp.json();
+        return (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+      } catch(e) {
+        lastErr = e;
+        if (!e.message.match(/503|429|500/)) throw e;
+      }
+    }
+    throw lastErr || new Error('Gemini לא זמין');
   }
 
   async function _callGemini(parts, onProg) {
-    onProg?.(40, '🤖 Gemini מנתח...');
+    const imgParts = parts.filter(p => p.inline_data);
+
+    // שלב 1 — תמלול: Gemini מעתיק את כל הטקסט שהוא רואה
+    onProg?.(20, '🤖 קורא את הטופס...');
+    let transcription;
+    try {
+      transcription = await _callGeminiText([{ text: _PROMPT_TRANSCRIBE }, ...imgParts]);
+    } catch(e) {
+      throw new Error('Gemini: תמלול נכשל — ' + e.message);
+    }
+
+    // שלב 2 — חילוץ: מחלץ שדות מהטקסט שתומלל
+    onProg?.(60, '🤖 מחלץ פרטים...');
     let raw;
     try {
-      raw = await _callGeminiRaw(parts, true); // structured output
+      raw = await _callGeminiRaw([{ text: _makeExtractPrompt(transcription) }], true);
     } catch(e) {
-      // fallback: ללא schema (תמיכה בדגמים ישנים)
-      raw = await _callGeminiRaw(parts, false);
+      // fallback: ללא schema
+      try {
+        const txt = await _callGeminiText([{ text: _makeExtractPrompt(transcription) }]);
+        const m = txt.match(/\{[\s\S]*?\}/);
+        if (!m) throw new Error('no json');
+        raw = JSON.parse(m[0]);
+      } catch(e2) { throw new Error('Gemini: חילוץ נכשל'); }
     }
-    const result = _normalizeResult(raw);
-    onProg?.(70, '🤖 בודק שדות חסרים...');
-    // חלץ רק את ה-inline_data parts לשימוש ב-retry
-    const imgParts = parts.filter(p => p.inline_data);
-    const final = await _retryMissingFields(result, imgParts);
+
     onProg?.(90, '🤖 מעבד תוצאה...');
-    return final;
+    return _normalizeResult(raw);
   }
 
   async function analyzeWithGemini(file, onProg) {
