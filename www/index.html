@@ -1237,10 +1237,11 @@
       date_day:      { type: "INTEGER", nullable: true },
       date_month:    { type: "INTEGER", nullable: true },
       date_year:     { type: "INTEGER", nullable: true },
+      date_raw:      { type: "STRING",  nullable: true },
       license_plate: { type: "STRING",  nullable: true },
       driver_name:   { type: "STRING",  nullable: true }
     },
-    required: ["date_day","date_month","date_year","license_plate","driver_name"]
+    required: ["date_day","date_month","date_year","date_raw","license_plate","driver_name"]
   };
 
   const _GEMINI_PROMPT = `טופס דוח תאונה צבאי ישראלי 33.1106.
@@ -1248,6 +1249,8 @@
 חוק ברזל: אם אינך רואה את הערך כתוב בטופס בצורה ברורה — החזר null. אסור להמציא, לנחש, או למלא מידע שאינו כתוב.
 
 date_day / date_month / date_year: תאריך **האירוע** בלבד (לא תאריך אישור/טיפול/חתימה). חפש ליד המילים "תאריך"/"ב-"/"ביום" בחלק העליון של הטופס. החזר יום, חודש ושנה כמספרים שלמים (שנה מלאה, למשל 2025). אם אינך בטוח בתאריך — החזר null לכל שלושת השדות.
+
+date_raw: העתק **מדויק** של תאריך האירוע כפי שכתוב בטופס (למשל "15.03.25" או "5/3/2025"). אם לא ברור — null.
 
 license_plate: לוחית רישוי הרכב בלבד. חפש ליד "לוחית"/"מספר רכב"/"רישוי". שתי אפשרויות בלבד:
 • אזרחית: בדיוק 9 ספרות בפורמט XXX-XX-XXX (3 ספרות, מקף, 2 ספרות, מקף, 3 ספרות). ספור: 3+2+3=8 ספרות+2 מקפים. אם יש לך פחות מ-9 ספרות — זו לא לוחית, החזר null.
@@ -1346,20 +1349,31 @@ driver_name: שם פרטי + שם משפחה בעברית של הנהג מהשד
     if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yy >= 2000 && yy <= 2099) {
       parsedDate = `${String(dd).padStart(2,'0')}.${String(mm).padStart(2,'0')}.${String(yy).slice(-2)}`;
     }
-    // fallback: date_raw / date כמחרוזת
-    if (!parsedDate) {
-      const rawStr = (raw.date_raw && raw.date_raw !== 'null') ? String(raw.date_raw).trim() : null;
-      const fmtStr = (raw.date     && raw.date     !== 'null') ? String(raw.date).trim()     : null;
-      if (rawStr) { try { const p = extractDate(rawStr); if (p) { const [d,m,y]=p.split('/'); parsedDate=`${d}.${m}.${String(y).slice(-2)}`; } } catch(e){} }
-      if (!parsedDate && fmtStr) parsedDate = fmtStr;
+    // פרסר date_raw — מחרוזת גולמית שהוחזרה מגמיני
+    let rawDate = null;
+    const rawStr = (raw.date_raw && raw.date_raw !== 'null') ? String(raw.date_raw).trim() : null;
+    if (rawStr) {
+      try {
+        const p = extractDate(rawStr);
+        if (p) { const [d,m,y] = p.split('/'); rawDate = `${d}.${m}.${String(y).slice(-2)}`; }
+      } catch(e) {}
     }
+    // cross-validation: אם שניהם קיימים אך סותרים — סמוך על date_raw (מדויק יותר)
+    if (parsedDate && rawDate && parsedDate !== rawDate) {
+      parsedDate = rawDate;
+    } else if (!parsedDate) {
+      parsedDate = rawDate;
+    }
+    // fallback אחרון: שדה date ישן
+    if (!parsedDate && raw.date && raw.date !== 'null') parsedDate = String(raw.date).trim();
+
     const plate = _validatePlate(raw.license_plate);
     const name  = _validateName(raw.driver_name);
     return {
       date:          parsedDate,
       license_plate: plate,
       driver_name:   name,
-      _debug: `יום:${dd||'?'} חודש:${mm||'?'} שנה:${yy||'?'} | לוחית:"${plate||'—'}" | נהג:"${name||'—'}"`
+      _debug: `יום:${dd||'?'} חודש:${mm||'?'} שנה:${yy||'?'} | גולמי:"${rawStr||'—'}" | לוחית:"${plate||'—'}" | נהג:"${name||'—'}"`
     };
   }
 
