@@ -194,7 +194,9 @@ class OCREngine {
     this._cvLoading = new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.async = true;
-      script.src   = 'https://docs.opencv.org/4.8.0/opencv.js';
+      script.src         = 'https://docs.opencv.org/4.8.0/opencv.js';
+      script.integrity   = 'sha384-kEC+2KaGZ4b+M4g8HgCNH9N+2TfOMWcNR6Ttw3mclO4ppnH1tX4Xgl9jwfowxoxM';
+      script.crossOrigin = 'anonymous';
 
       script.onload = () => {
         // OpenCV.js מאתחל את ה-WASM אחרי onload — יש להמתין ל-onRuntimeInitialized

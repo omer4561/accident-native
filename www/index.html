@@ -159,6 +159,24 @@
       cursor: pointer; text-align: center; font-weight: bold;
     }
     .error-tag { background: #fce8e6; color: #c5221f; border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 8px; }
+
+    /* תצוגה מקדימה לפני שמירה */
+    .preview-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .preview-thumb {
+      position: relative; width: 80px; height: 80px;
+      border-radius: 8px; overflow: hidden;
+      border: 2px solid #c5d8fd; flex-shrink: 0;
+      cursor: pointer; user-select: none; -webkit-user-select: none;
+    }
+    .preview-thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+    .preview-thumb:active { opacity: 0.7; }
+    .preview-thumb.pressing { border-color: #e53935; }
+    .preview-thumb .press-ring {
+      position: absolute; inset: 0; border-radius: 6px;
+      border: 3px solid #e53935; opacity: 0;
+      transition: opacity 0.05s;
+    }
+    .preview-thumb.pressing .press-ring { opacity: 1; }
     .summary-bar { background: #e6f4ea; border-radius: 10px; padding: 12px 16px; text-align: center; font-size: 15px; font-weight: bold; color: #1e8e3e; margin-bottom: 12px; }
     .worker-status { font-size: 12px; color: #aaa; text-align: center; margin-bottom: 8px; }
     .worker-status.ready { color: #34a853; }
@@ -355,12 +373,26 @@
 <!-- Image viewer overlay -->
 
 <div id="imgViewer" style="display:none;position:fixed;inset:0;z-index:20000;background:#000;flex-direction:column">
-  <div style="display:flex;align-items:center;padding:10px 16px;background:rgba(0,0,0,0.85);flex-shrink:0;direction:rtl">
+  <div style="display:flex;align-items:center;padding:10px 16px;background:rgba(0,0,0,0.85);flex-shrink:0;direction:rtl;gap:8px">
     <button onclick="closeImgViewer()" style="background:#1a73e8;border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;padding:8px 18px;border-radius:20px;white-space:nowrap">← חזרה</button>
-    <span id="imgViewerTitle" style="color:#fff;font-size:14px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 10px"></span>
+    <span id="imgViewerTitle" style="color:#fff;font-size:14px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 4px"></span>
+    <button id="imgViewerDeleteBtn" onclick="askDeletePreviewImage()" style="display:none;background:#e53935;border:none;color:#fff;font-size:14px;font-weight:700;cursor:pointer;padding:8px 16px;border-radius:20px;white-space:nowrap">🗑️ מחק</button>
   </div>
   <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center">
     <img id="imgViewerImg" src="" style="max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom">
+  </div>
+</div>
+
+<!-- dialog אישור מחיקת תמונה -->
+<div id="deleteConfirmDialog" style="display:none;position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,0.65);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;width:min(88vw,340px);text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.3)">
+    <div style="font-size:40px;margin-bottom:10px">🗑️</div>
+    <div style="font-size:17px;font-weight:bold;color:#222;margin-bottom:8px">למחוק את התמונה?</div>
+    <div style="font-size:13px;color:#666;margin-bottom:24px">התמונה תוסר מהדוח לפני השמירה</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="cancelDeletePreviewImage()" style="flex:1;padding:13px;border:1.5px solid #ccc;background:#fff;border-radius:10px;font-size:15px;cursor:pointer;color:#444">ביטול</button>
+      <button onclick="confirmDeletePreviewImage()" style="flex:1;padding:13px;border:none;background:#e53935;color:#fff;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer">אישור</button>
+    </div>
   </div>
 </div>
 <div class="container">
@@ -1090,6 +1122,8 @@
     img.style.transform = '';
     img.onclick = null;
     document.getElementById('imgViewer').style.display = 'none';
+    document.getElementById('imgViewerDeleteBtn').style.display = 'none';
+    _viewerDeleteContext = null;
     img.src = '';
   }
 
@@ -1501,7 +1535,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
       date:          parsedDate,
       license_plate: plate,
       driver_name:   name,
-      _debug: `יום:${dd||'?'} חודש:${mm||'?'} שנה:${yy||'?'} | גולמי:"${rawStr||'—'}" | לוחית-גולמי:"${rawPlate||'—'}" לוחית-אחרי:"${plate||'—'}" | נהג-גולמי:"${rawName||'—'}" נהג-אחרי:"${name||'—'}"`
+      _debug: `יום:${dd||'?'} חודש:${mm||'?'} שנה:${yy||'?'} | גולמי:"${rawStr||'—'}" | לוחית-גולמי:"${rawPlate||'—'}" לוחית-אחרי:"${plate||'—'}" | נהג-גולמי:"${rawName||'—'}" נהג-אחרי:"${name||'—'}" | parsed:"${parsedDate||'—'}" raw-parsed:"${rawDate||'—'}"`
     };
   }
 
@@ -1591,6 +1625,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   const MAX_SIZE = 100 * 1024 * 1024;
   let selectedFiles = [];
   let workerReady = false;
+  let _viewerDeleteContext = null; // { key, idx } — set when viewer opened from preview grid
   let _ocrEngine = null;
   try { _ocrEngine = new OCREngine(); } catch(e) { console.warn('OCR engine unavailable:', e); }
 
@@ -1768,7 +1803,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     }
 
     // last resort: DD/MM ללא שנה (למשל 28.3 או 28.3.)
-    const dm = text.match(/(\\d{1,2})[\\s]*[/\\.\\-|\\\\lI][\\s]*(\\d{1,2})(?!\\d)/);
+    const dm = text.match(/(\d{1,2})[\s]*[\/.\-|\\lI][\s]*(\d{1,2})(?!\d)/);
     if (dm) {
       const dd=+dm[1], mm=+dm[2];
       if (_valid(dd, mm, curYear)) return _fmt(dd, mm, curYear);
@@ -2180,6 +2215,112 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     document.getElementById('processBtn').textContent = `🔍 עבד ${selectedFiles.length} תמונות`;
   }
 
+  // ===================== PREVIEW BEFORE SAVE =====================
+  // ObjectURL cache כדי לא ליצור URL חדש בכל render
+  const _previewUrls = new Map(); // file → objectURL
+
+  function _getPreviewUrl(file) {
+    if (!_previewUrls.has(file)) _previewUrls.set(file, URL.createObjectURL(file));
+    return _previewUrls.get(file);
+  }
+
+  function buildPreviewGrid(key, items) {
+    if (!items.length) return '';
+    return items.map((item, idx) => {
+      const url = _getPreviewUrl(item.file);
+      const safeKey = key.replace(/'/g, "\\'");
+      // long press: 500ms
+      return `<div class="preview-thumb"
+        onmousedown="startPreviewPress(event,'${safeKey}',${idx})"
+        onmouseup="cancelPreviewPress(event)"
+        onmouseleave="cancelPreviewPress(event)"
+        ontouchstart="startPreviewPress(event,'${safeKey}',${idx})"
+        ontouchend="cancelPreviewPress(event)"
+        ontouchcancel="cancelPreviewPress(event)">
+        <img src="${url}">
+        <div class="press-ring"></div>
+      </div>`;
+    }).join('');
+  }
+
+  let _pressTimer = null;
+  let _pressEl = null;
+
+  function startPreviewPress(e, key, idx) {
+    e.preventDefault();
+    if (_pressTimer) clearTimeout(_pressTimer);
+    _pressEl = e.currentTarget;
+    _pressEl.classList.add('pressing');
+    _pressTimer = setTimeout(() => {
+      _pressTimer = null;
+      if (_pressEl) { _pressEl.classList.remove('pressing'); _pressEl = null; }
+      previewGroupImage(key, idx);
+    }, 500);
+  }
+
+  function cancelPreviewPress(e) {
+    if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
+    if (_pressEl) { _pressEl.classList.remove('pressing'); _pressEl = null; }
+  }
+
+  function previewGroupImage(key, idx) {
+    const items = window.groupsData[key];
+    if (!items || !items[idx]) return;
+    const url = _getPreviewUrl(items[idx].file);
+    const viewer = document.getElementById('imgViewer');
+    const img    = document.getElementById('imgViewerImg');
+    const title  = document.getElementById('imgViewerTitle');
+    title.textContent = `תמונה ${idx + 1} מתוך ${items.length}`;
+    img.src = url;
+    // הצג כפתור מחיקה וזכור context
+    _viewerDeleteContext = { key, idx };
+    document.getElementById('imgViewerDeleteBtn').style.display = 'block';
+    viewer.style.display = 'flex';
+  }
+
+  function askDeletePreviewImage() {
+    document.getElementById('deleteConfirmDialog').style.display = 'flex';
+  }
+
+  function cancelDeletePreviewImage() {
+    document.getElementById('deleteConfirmDialog').style.display = 'none';
+  }
+
+  function confirmDeletePreviewImage() {
+    document.getElementById('deleteConfirmDialog').style.display = 'none';
+    closeImgViewer();
+    if (!_viewerDeleteContext) return;
+    const { key, idx } = _viewerDeleteContext;
+    _viewerDeleteContext = null;
+    removeGroupImage(key, idx);
+  }
+
+  function removeGroupImage(key, idx) {
+    const items = window.groupsData[key];
+    if (!items) return;
+    // שחרר ObjectURL
+    const file = items[idx].file;
+    if (_previewUrls.has(file)) { URL.revokeObjectURL(_previewUrls.get(file)); _previewUrls.delete(file); }
+    items.splice(idx, 1);
+    const ek = key.replace(/[^a-z0-9]/gi,'_');
+    // עדכן גריד תצוגה מקדימה
+    const grid = document.getElementById('preview_' + ek);
+    if (grid) grid.innerHTML = buildPreviewGrid(key, items);
+    // עדכן כפתור שמירה
+    const saveBtn = document.getElementById('saveBtn_' + ek);
+    if (saveBtn) {
+      if (!items.length) {
+        saveBtn.disabled = true;
+        saveBtn.style.opacity = '0.4';
+        saveBtn.innerHTML = '💾 אין תמונות<br><small style="font-size:10px;opacity:0.85">דוחות_תאונה/</small>';
+      } else {
+        const multiPage = items.length > 1;
+        saveBtn.innerHTML = `💾 שמור${multiPage ? ` (${items.length} עמודים)` : ''}<br><small style="font-size:10px;opacity:0.85">דוחות_תאונה/</small>`;
+      }
+    }
+    showToast(`🗑️ תמונה הוסרה (${items.length} נותרו)`);
+  }
+
   // ===================== SHOW RESULTS =====================
   function showResults(results, errors) {
     const section = document.getElementById('resultsSection');
@@ -2233,10 +2374,10 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
           <input class="edit-field" id="driver_${ek}" value="${(merged.driver_name||'').replace(/"/g,'&quot;')}"
             placeholder="לא זוהה" oninput="updateGroupData('${safeKey}','driver_name',this.value)">
         </div>
-        ${multiPage ? `<div style="font-size:12px;color:#888;margin-bottom:8px">📄 ${items.length} עמודים</div>` : ''}
         ${merged._debug ? `<div style="font-size:11px;color:#999;background:#f5f5f5;border-radius:6px;padding:5px 8px;margin-bottom:8px;direction:rtl">🤖 גמיני קרא: ${merged._debug}</div>` : ''}
+        <div id="preview_${ek}" class="preview-grid">${buildPreviewGrid(key, items)}</div>
         <div class="pages-row">
-          <button class="page-btn-all" onclick="saveGroup('${safeKey}', this)">
+          <button class="page-btn-all" id="saveBtn_${ek}" onclick="saveGroup('${safeKey}', this)">
             💾 שמור${multiPage ? ` (${items.length} עמודים)` : ''}<br>
             <small style="font-size:10px;opacity:0.85">דוחות_תאונה/</small>
           </button>
