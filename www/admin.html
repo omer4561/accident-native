@@ -117,10 +117,26 @@
   const ADMIN_PASS = 'admin2025';
   const AUTH_KEY  = 'admin_authed';
 
-  function checkLogin() {
+  async function hashPass(pass) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass + 'acc2025'));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  function isSessionValid() {
+    const v = localStorage.getItem(AUTH_KEY) || '';
+    const [, ts] = v.split(':');
+    return ts && (Date.now() - +ts < 8 * 3600 * 1000);
+  }
+
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  async function checkLogin() {
     const val = document.getElementById('passInput').value;
-    if (val === ADMIN_PASS) {
-      localStorage.setItem(AUTH_KEY, '1');
+    const h = await hashPass(val);
+    const expected = await hashPass(ADMIN_PASS);
+    if (h === expected) {
+      localStorage.setItem(AUTH_KEY, h + ':' + Date.now());
       document.getElementById('loginOverlay').classList.remove('open');
       loadReports();
     } else {
@@ -136,7 +152,7 @@
   }
 
   // בדיקת אימות בכניסה
-  if (localStorage.getItem(AUTH_KEY) !== '1') {
+  if (!isSessionValid()) {
     document.getElementById('loginOverlay').classList.add('open');
     setTimeout(() => document.getElementById('passInput').focus(), 100);
   } else {
@@ -156,7 +172,7 @@
   }
 
   async function hfReadJson(repoPath) {
-    const r = await fetch(`${HF_FILES}/${repoPath}?token=${HF_TOKEN}`);
+    const r = await fetch(`${HF_FILES}/${repoPath}`, { headers: { 'Authorization': `Bearer ${HF_TOKEN}` } });
     if (!r.ok) return null;
     return r.json();
   }
@@ -164,7 +180,19 @@
   async function loadReports() {
     const container = document.getElementById('reports');
     if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') {
-      container.innerHTML = '<div class="loading">⚠️ HF_TOKEN לא הוגדר ב-GitHub Secrets — הוסף את הסוד ופרוס מחדש</div>';
+      container.innerHTML = `<div class="loading" style="text-align:center;padding:48px;max-width:500px;margin:0 auto">
+  <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+  <div style="font-size:18px;font-weight:bold;color:#c00;margin-bottom:12px">HF_TOKEN לא מוגדר</div>
+  <div style="font-size:14px;color:#555;line-height:2;text-align:right">
+    כדי לתקן:<br>
+    1. פתח את הריפו ב-GitHub<br>
+    2. Settings → Secrets and variables → Actions<br>
+    3. לחץ "New repository secret"<br>
+    4. שם: <code style="background:#f5f5f5;padding:2px 6px;border-radius:4px;font-family:monospace">HF_TOKEN</code><br>
+    5. ערך: ה-token מ-HuggingFace (הגדרות → Access Tokens → New token עם הרשאת write)<br>
+    6. פרוס מחדש — push כלשהו ל-main
+  </div>
+</div>`;
       return;
     }
     container.innerHTML = '<div class="loading">⏳ טוען נתונים מ-HuggingFace...</div>';
@@ -249,15 +277,15 @@
 
       return `<div class="card">
         <div class="card-header">
-          <div class="card-plate">🚗 ${meta.plate || 'לא זוהה'}</div>
+          <div class="card-plate">🚗 ${esc(meta.plate) || 'לא זוהה'}</div>
           <div class="card-date">${savedDate}</div>
         </div>
         <div class="card-meta">
-          📅 ${meta.date || 'ללא תאריך'} &nbsp; 👤 ${meta.driver || 'לא זוהה'}
-          ${meta.pages > 1 ? `&nbsp; <span class="badge">${meta.pages} עמודים</span>` : ''}
+          📅 ${esc(meta.date) || 'ללא תאריך'} &nbsp; 👤 ${esc(meta.driver) || 'לא זוהה'}
+          ${meta.pages > 1 ? `&nbsp; <span class="badge">${esc(meta.pages)} עמודים</span>` : ''}
         </div>
         <div class="card-user">
-          👨‍💼 ${meta.userName || 'לא ידוע'} &nbsp;|&nbsp; 📞 ${meta.userContact || '—'}
+          👨‍💼 ${esc(meta.userName) || 'לא ידוע'} &nbsp;|&nbsp; 📞 ${esc(meta.userContact) || '—'}
         </div>
         ${imgs ? `<div class="card-imgs">${imgs}</div>` : '<div style="color:#aaa;font-size:12px">אין תמונות</div>'}
       </div>`;

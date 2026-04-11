@@ -15,10 +15,12 @@ class OCREngine {
   /* ══════════════════ PUBLIC API ══════════════════ */
 
   constructor() {
-    this._S      = 32;      // גודל תבנית נורמלי
-    this._tmpls  = null;    // תבניות ייחוס (נבנות ב-init)
-    this._nn     = null;    // משקלות רשת נוירונים (אופציונלי)
-    this._ready  = false;
+    this._S        = 32;      // גודל תבנית נורמלי
+    this._tmpls    = null;    // תבניות ייחוס (נבנות ב-init)
+    this._nn       = null;    // משקלות רשת נוירונים (אופציונלי)
+    this._ready    = false;
+    this._cvReady   = false;  // true לאחר ש-OpenCV.js אותחל במלואו
+    this._cvLoading = null;   // Promise משותף — מונע טעינה כפולה
   }
 
   /** אתחול — בונה תבניות ייחוס מ-Canvas, ללא הורדות */
@@ -46,22 +48,78 @@ class OCREngine {
   async analyzeImage(file, onProg) {
     if (!this._ready) await this.init(onProg);
 
-    onProg?.(5,  'טוען תמונה...');
-    const { px, W, H } = await this._loadPixels(file, 1800);
+    // ── שלב 1: זיהוי זווית ב-400px (מהיר) ─────────────────────────────
+    onProg?.(5,  'מזהה זווית מסמך...');
+    const { px: pxS, W: sW, H: sH } = await this._loadPixels(file, 400);
+    const gS = this._toGray(pxS, sW, sH);
+    const bS = this._adaptiveThreshold(gS, sW, sH);
+    const cS = this._removeNoise(bS, sW, sH);
+    const angle = this._estimateSkew(cS, sW, sH);
 
-    onProg?.(15, 'ממיר שחור-לבן...');
+    // ── עיבוד בפורמט מלא, עם יישור אם נדרש ────────────────────────────
+    const label = Math.abs(angle) >= 0.009
+      ? `מיישר (${(angle * 180 / Math.PI).toFixed(1)}°)...`
+      : 'טוען בפורמט מלא...';
+    onProg?.(18, label);
+    const { px, W, H } = await this._applyDeskew(file, angle, 1800);
+
+    onProg?.(28, 'ממיר שחור-לבן...');
     const gray  = this._toGray(px, W, H);
-    const bin   = this._adaptiveThreshold(gray, W, H);
+    // נסה OpenCV Gaussian threshold קודם; אם נכשל — fallback ל-Bradley-Roth
+    let bin;
+    try {
+      bin = await this._adaptiveThresholdCV(gray, W, H);
+    } catch(_) {
+      bin = this._adaptiveThreshold(gray, W, H);
+    }
     const clean = this._removeNoise(bin, W, H);
 
-    onProg?.(35, 'מחפש תאריך...');
+    onProg?.(40, 'מחפש תאריך...');
     const date  = this._findDate(clean, W, H);
 
-    onProg?.(65, 'מחפש לוחית...');
+    onProg?.(70, 'מחפש לוחית...');
     const plate = this._findPlate(clean, W, H);
 
     onProg?.(100, '✅ הושלם');
     return { date: date || null, license_plate: plate || null, driver_name: null };
+  }
+
+  /**
+   * ממשק ציבורי — מחזיר File מיושר לשימוש ב-Gemini pipeline.
+   * אם הזווית קטנה מ-0.5° מחזיר את הקובץ המקורי (ללא עיבוד).
+   */
+  async deskewFile(file) {
+    const { px, W, H } = await this._loadPixels(file, 400);
+    const gray  = this._toGray(px, W, H);
+    const bin   = this._adaptiveThreshold(gray, W, H);
+    const clean = this._removeNoise(bin, W, H);
+    const angle = this._estimateSkew(clean, W, H);
+
+    if (Math.abs(angle) < 0.009) return file; // < ~0.5° — לא שווה
+
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const IW = img.naturalWidth, IH = img.naturalHeight;
+        const c  = document.createElement('canvas');
+        c.width = IW; c.height = IH;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, IW, IH);
+        ctx.save();
+        ctx.translate(IW / 2, IH / 2);
+        ctx.rotate(-angle);          // תיקון הטיה
+        ctx.drawImage(img, -IW / 2, -IH / 2);
+        ctx.restore();
+        c.toBlob(blob => resolve(
+          blob ? new File([blob], file.name, { type: 'image/jpeg' }) : file
+        ), 'image/jpeg', 0.95);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
   }
 
   /* ══════════════════ IMAGE LOADING ══════════════════ */
@@ -121,6 +179,77 @@ class OCREngine {
         bin[y*W+x] = (gray[y*W+x] * cnt < s * T) ? 1 : 0;
       }
     }
+    return bin;
+  }
+
+  /**
+   * טוען OpenCV.js בעצלנות — רק בקריאה הראשונה.
+   * קריאות חוזרות מחזירות את אותו Promise (או resolve מיידי אם כבר מוכן).
+   * @returns {Promise<object>} מחלץ window.cv כש-Runtime מוכן
+   */
+  _loadOpenCV() {
+    if (this._cvReady)   return Promise.resolve(window.cv);
+    if (this._cvLoading) return this._cvLoading;
+
+    this._cvLoading = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.async = true;
+      script.src   = 'https://docs.opencv.org/4.8.0/opencv.js';
+
+      script.onload = () => {
+        // OpenCV.js מאתחל את ה-WASM אחרי onload — יש להמתין ל-onRuntimeInitialized
+        if (window.cv && window.cv.Mat) {
+          // כבר מוכן (נדיר — build סינכרוני)
+          this._cvReady = true;
+          resolve(window.cv);
+        } else {
+          window.cv = window.cv || {};
+          window.cv.onRuntimeInitialized = () => {
+            this._cvReady = true;
+            resolve(window.cv);
+          };
+        }
+      };
+
+      script.onerror = () => reject(new Error('OpenCV.js failed to load'));
+      document.head.appendChild(script);
+    });
+
+    return this._cvLoading;
+  }
+
+  /**
+   * חלופה ל-_adaptiveThreshold המשתמשת ב-OpenCV.js.
+   * מחזירה Uint8Array באותו פורמט: 1=דיו, 0=רקע.
+   * טוענת את OpenCV.js בעצלנות בקריאה הראשונה.
+   * @param {Uint8Array} gray  מפת אפור (ערך לכל פיקסל)
+   * @param {number} W
+   * @param {number} H
+   * @returns {Promise<Uint8Array>}
+   */
+  async _adaptiveThresholdCV(gray, W, H) {
+    const cv = await this._loadOpenCV();
+
+    const src = new cv.Mat(H, W, cv.CV_8UC1);
+    src.data.set(gray);
+
+    const dst = new cv.Mat();
+    // blockSize=49 ≈ R=24 (2×24+1) כמו בגרסת ה-JS המקורית
+    // THRESH_BINARY_INV: פיקסל כהה → 255; C=10 ≈ תיקון bias
+    cv.adaptiveThreshold(
+      src, dst, 255,
+      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+      cv.THRESH_BINARY_INV,
+      49, 10
+    );
+
+    // המרה לפורמט פנימי: 255 → 1, 0 → 0
+    const bin = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) bin[i] = dst.data[i] > 0 ? 1 : 0;
+
+    src.delete();
+    dst.delete();
+
     return bin;
   }
 
@@ -447,6 +576,89 @@ class OCREngine {
     if (dig.length===7) return `${dig.slice(0,2)}-${dig.slice(2,5)}-${dig.slice(5)}`;
     if (dig.length===8) return dig;
     return null;
+  }
+  /* ══════════════════ DESKEW (שלב 1) ══════════════════ */
+
+  /**
+   * מעריך זווית הטיה של מסמך בשיטת Projection-Profile.
+   * מחפש את הזווית (בין -15° ל-+15°) שבה פרופיל שורות ה-binary
+   * הכי "מנוקד" (שונות מקסימלית) — כלומר שורות הטקסט אופקיות.
+   * @param {Uint8Array} bin  תמונה בינארית (0=לבן, 1=שחור)
+   * @param {number} W
+   * @param {number} H
+   * @returns {number}  זווית תיקון (radians, CCW convention)
+   */
+  _estimateSkew(bin, W, H) {
+    const cx = W / 2, cy = H / 2;
+    let bestScore = -1, bestAngle = 0;
+
+    for (let deg = -15; deg <= 15; deg += 0.5) {
+      const rad = deg * Math.PI / 180;
+      const cos = Math.cos(rad), sin = Math.sin(rad);
+      const rowSums = new Int32Array(H);
+
+      for (let y = 0; y < H; y++) {
+        const dy = y - cy;
+        for (let x = 0; x < W; x++) {
+          const dx = x - cx;
+          // inverse CCW rotation: מה הפיקסל המקורי שמיפה ל-(x,y) אחרי סיבוב ב-rad?
+          const sx = Math.round(cos * dx + sin * dy + cx);
+          const sy = Math.round(-sin * dx + cos * dy + cy);
+          if (sx >= 0 && sx < W && sy >= 0 && sy < H) {
+            rowSums[y] += bin[sy * W + sx];
+          }
+        }
+      }
+
+      // שונות של סכומי השורות — גדולה יותר = שורות טקסט אופקיות יותר
+      let mean = 0;
+      for (let i = 0; i < H; i++) mean += rowSums[i];
+      mean /= H;
+      let variance = 0;
+      for (let i = 0; i < H; i++) variance += (rowSums[i] - mean) ** 2;
+
+      if (variance > bestScore) { bestScore = variance; bestAngle = rad; }
+    }
+
+    // ווידוא שיש מספיק טקסט — אם אין, אל תגע בתמונה
+    const inkTotal = bin.reduce((a, v) => a + v, 0);
+    if (inkTotal < W * H * 0.005) return 0;
+
+    return bestAngle;
+  }
+
+  /**
+   * טוען תמונה מקובץ בגודל maxSide ומחיל סיבוב (אם angle != 0).
+   * Canvas rotation — מהיר + HW-accelerated על מובייל.
+   */
+  _applyDeskew(file, angle, maxSide) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const W = Math.round(img.naturalWidth  * scale);
+        const H = Math.round(img.naturalHeight * scale);
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, W, H);
+        if (Math.abs(angle) >= 0.009) {
+          ctx.save();
+          ctx.translate(W / 2, H / 2);
+          ctx.rotate(-angle);
+          ctx.drawImage(img, -W / 2, -H / 2, W, H);
+          ctx.restore();
+        } else {
+          ctx.drawImage(img, 0, 0, W, H);
+        }
+        resolve({ px: ctx.getImageData(0, 0, W, H).data, W, H });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load failed')); };
+      img.src = url;
+    });
   }
 }
 

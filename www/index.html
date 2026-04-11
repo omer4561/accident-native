@@ -822,7 +822,14 @@
 
   (async function checkUpdate() {
     if (location.href.startsWith('capacitor://')) {
-      location.href = 'https://omer4561.github.io/accident-native';
+      // liveBoot כבר ניסה — זה fallback אם נכשל (למשל timeout ראשון)
+      try {
+        const r = await fetch(
+          'https://omer4561.github.io/accident-native/version.json?t=' + Date.now(),
+          { cache: 'no-store', signal: AbortSignal.timeout(5000) }
+        );
+        if (r.ok) location.replace('https://omer4561.github.io/accident-native/');
+      } catch(e) { /* offline — נשאר על הגרסה המקומית */ }
       return;
     }
     try {
@@ -902,16 +909,26 @@
     const folder = r.folder || '';
     const parts = folder.split('/');
     const last = parts[parts.length - 1];
-    return last || 'no_date';
+    if (!last) return 'no_date';
+    // backward compat: YYYY_MM → YYYY/MM
+    const legacy = last.match(/^(\d{4})_(\d{2})$/);
+    if (legacy) return legacy[1] + '/' + legacy[2];
+    return last;
   }
 
   function folderLabel(key) {
     if (!key || key === 'no_date') return '📁 ללא תאריך';
-    // YYYY_MM → אפריל 26
-    const m = key.match(/^(\d{4})_(\d{2})$/);
-    if (m) {
-      const mm = parseInt(m[2], 10);
-      return `📁 ${HE_MONTHS[mm] || m[2]} ${m[1].slice(2)}`;
+    // YYYY/MM → אפריל 26
+    const slash = key.match(/^(\d{4})\/(\d{2})$/);
+    if (slash) {
+      const mm = parseInt(slash[2], 10);
+      return `📁 ${HE_MONTHS[mm] || slash[2]} ${slash[1].slice(2)}`;
+    }
+    // legacy YYYY_MM (fallback, shouldn't reach here after folderKey migration)
+    const legacy = key.match(/^(\d{4})_(\d{2})$/);
+    if (legacy) {
+      const mm = parseInt(legacy[2], 10);
+      return `📁 ${HE_MONTHS[mm] || legacy[2]} ${legacy[1].slice(2)}`;
     }
     return `📁 ${key}`;
   }
@@ -949,7 +966,7 @@
     const active = history.filter(r => !r.trashed && matchSearch(r));
     if (!active.length) { content.innerHTML = '<div class="empty-msg">📭 אין תיקיות</div>'; return; }
 
-    // Group by year/month
+    // Group by YYYY/MM key
     const groups = {};
     for (const r of active) {
       const k = folderKey(r);
@@ -957,41 +974,110 @@
       groups[k].push(r);
     }
 
-    // Sort newest first
-    const keys = Object.keys(groups).sort((a,b) => {
+    // Build year→months hierarchy
+    // yearsMap: { '2025': ['2025/04', '2025/03', ...], ... }
+    const yearsMap = {};
+    for (const k of Object.keys(groups)) {
+      if (k === 'no_date') {
+        if (!yearsMap['no_date']) yearsMap['no_date'] = [];
+        yearsMap['no_date'].push(k);
+        continue;
+      }
+      const slash = k.match(/^(\d{4})\/(\d{2})$/);
+      const year = slash ? slash[1] : k;
+      if (!yearsMap[year]) yearsMap[year] = [];
+      yearsMap[year].push(k);
+    }
+
+    // Sort years newest first
+    const years = Object.keys(yearsMap).sort((a, b) => {
       if (a === 'no_date') return 1;
       if (b === 'no_date') return -1;
       return b.localeCompare(a);
     });
 
     let html = '';
-    for (const k of keys) {
-      const reps = groups[k];
-      const open = openFolders.has(k);
-      const cnt  = reps.length;
-      html += `<div class="folder-row" onclick="toggleFolder('${k}')">
-        <span class="folder-name">${folderLabel(k)}</span>
-        <span class="folder-count">${cnt} דוח${cnt !== 1 ? 'ות' : ''}</span>
-        <span class="folder-arrow">${open ? '▲' : '▼'}</span>
+    for (const year of years) {
+      const monthKeys = yearsMap[year].sort((a, b) => {
+        if (a === 'no_date') return 1;
+        if (b === 'no_date') return -1;
+        return b.localeCompare(a);
+      });
+      const totalInYear = monthKeys.reduce((s, k) => s + groups[k].length, 0);
+      const yearOpen = openFolders.has(year);
+
+      if (year === 'no_date') {
+        // "ללא תאריך" — treat as single flat folder (no year wrapper needed)
+        const reps = groups['no_date'];
+        const open = openFolders.has('no_date');
+        const cnt  = reps.length;
+        html += `<div class="folder-row" onclick="toggleFolder('no_date')">
+          <span class="folder-name">📁 ללא תאריך</span>
+          <span class="folder-count">${cnt} דוח${cnt !== 1 ? 'ות' : ''}</span>
+          <span class="folder-arrow">${open ? '▲' : '▼'}</span>
+        </div>`;
+        if (open) {
+          html += '<div class="folder-items">';
+          for (const r of reps) {
+            const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
+            const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
+            const viewBtns = (r.files || []).map((path, i) => {
+              return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
+            }).join('');
+            html += `<div class="report-item">
+              <div class="ri-plate">🚗 ${plate}</div>
+              <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 👤 ${r.driver || 'לא זוהה'}</div>
+              <div class="ri-files">${files}</div>
+              <div class="ri-actions">
+                ${viewBtns}
+                ${r.files && r.files.length > 1 ? `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();mergeHistoryReport(${r.id})">🔗 קבץ</button>` : ''}
+                <button class="ri-btn ri-btn-del" onclick="event.stopPropagation();trashReport(${r.id})">🗑️ מחק</button>
+              </div></div>`;
+          }
+          html += '</div>';
+        }
+        continue;
+      }
+
+      // Year row (level 1)
+      html += `<div class="folder-row folder-year" onclick="toggleFolder('${year}')">
+        <span class="folder-name">📅 ${year}</span>
+        <span class="folder-count">${totalInYear} דוח${totalInYear !== 1 ? 'ות' : ''}</span>
+        <span class="folder-arrow">${yearOpen ? '▲' : '▼'}</span>
       </div>`;
-      if (open) {
+
+      if (yearOpen) {
         html += '<div class="folder-items">';
-        for (const r of reps) {
-          const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
-          const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
-          const viewBtns = (r.files || []).map((path, i) => {
-            const fname = path.split('/').pop();
-            return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
-          }).join('');
-          html += `<div class="report-item">
-            <div class="ri-plate">🚗 ${plate}</div>
-            <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 👤 ${r.driver || 'לא זוהה'}</div>
-            <div class="ri-files">${files}</div>
-            <div class="ri-actions">
-              ${viewBtns}
-              ${r.files && r.files.length > 1 ? `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();mergeHistoryReport(${r.id})">🔗 קבץ</button>` : ''}
-              <button class="ri-btn ri-btn-del" onclick="event.stopPropagation();trashReport(${r.id})">🗑️ מחק</button>
-            </div></div>`;
+        for (const k of monthKeys) {
+          const reps = groups[k];
+          const open = openFolders.has(k);
+          const cnt  = reps.length;
+          // Month row (level 2, indented via folder-items nesting)
+          html += `<div class="folder-row" onclick="event.stopPropagation();toggleFolder('${k}')">
+            <span class="folder-name">${folderLabel(k)}</span>
+            <span class="folder-count">${cnt} דוח${cnt !== 1 ? 'ות' : ''}</span>
+            <span class="folder-arrow">${open ? '▲' : '▼'}</span>
+          </div>`;
+          if (open) {
+            html += '<div class="folder-items">';
+            for (const r of reps) {
+              const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
+              const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
+              const viewBtns = (r.files || []).map((path, i) => {
+                return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
+              }).join('');
+              html += `<div class="report-item">
+                <div class="ri-plate">🚗 ${plate}</div>
+                <div class="ri-meta">📅 ${r.date || 'ללא תאריך'} &nbsp; 👤 ${r.driver || 'לא זוהה'}</div>
+                <div class="ri-files">${files}</div>
+                <div class="ri-actions">
+                  ${viewBtns}
+                  ${r.files && r.files.length > 1 ? `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();mergeHistoryReport(${r.id})">🔗 קבץ</button>` : ''}
+                  <button class="ri-btn ri-btn-del" onclick="event.stopPropagation();trashReport(${r.id})">🗑️ מחק</button>
+                </div></div>`;
+            }
+            html += '</div>';
+          }
         }
         html += '</div>';
       }
@@ -1301,7 +1387,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (attempt > 0) await new Promise(r => setTimeout(r, 10000)); // המתן 10 שניות לפני retry
         try {
-          const genConfig = { temperature: 0, topP: 1, topK: 32, maxOutputTokens: 1024 };
+          const genConfig = { temperature: 0, topP: 1, topK: 32, maxOutputTokens: 8192 };
           if (useSchema) {
             genConfig.responseMimeType = 'application/json';
             genConfig.responseSchema = _GEMINI_SCHEMA;
@@ -1329,12 +1415,18 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
           }
           const json = await resp.json();
           const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-          try { return JSON.parse(text); } catch(e) {}
-          const start = text.indexOf('{'), end = text.lastIndexOf('}');
+          // נקה prefixים שגמיני Pro מוסיף במצב free-text (thinking model)
+          const cleaned = text
+            .replace(/^```json\s*/i, '')
+            .replace(/```\s*$/, '')
+            .replace(/^json\s+/i, '')
+            .trim();
+          try { return JSON.parse(cleaned); } catch(e) {}
+          const start = cleaned.indexOf('{'), end = cleaned.lastIndexOf('}');
           if (start !== -1 && end > start) {
-            try { return JSON.parse(text.slice(start, end + 1)); } catch(e) {}
+            try { return JSON.parse(cleaned.slice(start, end + 1)); } catch(e) {}
           }
-          lastErr = new Error('Gemini: תגובה לא תקינה — ' + text.slice(0, 80));
+          lastErr = new Error('Gemini: תגובה לא תקינה — ' + text.slice(0, 200));
           break;
         } catch(e) {
           lastErr = e;
@@ -1393,12 +1485,17 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     } else if (!parsedDate) {
       parsedDate = rawDate;
     }
+    // fallback דרך DataProcessor.normalizeDate (לפני שדה date ישן)
+    if (!parsedDate && rawStr) {
+      const nd = window.DataProcessor?.normalizeDate(rawStr);
+      if (nd) { const [d,m,y] = nd.split('/'); parsedDate = `${d}.${m}.${y.slice(-2)}`; }
+    }
     // fallback אחרון: שדה date ישן
     if (!parsedDate && raw.date && raw.date !== 'null') parsedDate = String(raw.date).trim();
 
     const rawPlate = (raw.license_plate && raw.license_plate !== 'null') ? String(raw.license_plate).trim() : null;
     const rawName  = (raw.driver_name  && raw.driver_name  !== 'null') ? String(raw.driver_name).trim()  : null;
-    const plate = _validatePlate(rawPlate);
+    const plate = _validatePlate(rawPlate) ?? window.DataProcessor?.normalizePlate(rawPlate);
     const name  = _validateName(rawName);
     return {
       date:          parsedDate,
@@ -1464,9 +1561,11 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   }
 
   async function analyzeWithGemini(file, onProg) {
+    // שלב 1: יישור מסמך לפני שליחה לגמיני
+    onProg?.(5, '📐 מיישר מסמך...');
+    const aligned = await (_ocrEngine?.deskewFile(file) ?? Promise.resolve(file));
     onProg?.(10, '🤖 שולח ל-Gemini...');
-    // דחיסה ל-2500px / 95% איכות — רזולוציה גבוהה לדיוק מקסימלי בקריאת טקסט
-    const compressed = await compressForUpload(file, 2500, 0.95);
+    const compressed = await compressForUpload(aligned, 2500, 0.95);
     const base64 = await fileToBase64(compressed);
     return _callGemini([
       { text: _GEMINI_PROMPT },
@@ -1475,13 +1574,16 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   }
 
   async function analyzeWithGeminiMulti(files, onProg) {
-    onProg?.(10, '🤖 שולח ל-Gemini (כל העמודים)...');
+    onProg?.(5, '📐 מיישר מסמכים...');
     const parts = [{ text: _GEMINI_PROMPT }];
     for (const file of files) {
-      const compressed = await compressForUpload(file, 2500, 0.95);
+      // שלב 1: יישור לכל עמוד לפני שליחה
+      const aligned = await (_ocrEngine?.deskewFile(file) ?? Promise.resolve(file));
+      const compressed = await compressForUpload(aligned, 2500, 0.95);
       const base64 = await fileToBase64(compressed);
       parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
     }
+    onProg?.(10, '🤖 שולח ל-Gemini (כל העמודים)...');
     return _callGemini(parts, onProg);
   }
 
@@ -2159,13 +2261,23 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   const ADMIN_PASS = 'admin2025';
   const ADMIN_AUTH_KEY = 'admin_authed';
 
+  async function _adminHashPass(pass) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass + 'acc2025'));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  function _adminSessionValid() {
+    const v = localStorage.getItem(ADMIN_AUTH_KEY) || '';
+    const [, ts] = v.split(':');
+    return ts && (Date.now() - +ts < 8 * 3600 * 1000);
+  }
+
   let _adminReports = [], _adminUsers = {};
 
   function openAdminPanel() {
     document.getElementById('historyOverlay').classList.remove('open');
     const panel = document.getElementById('adminPanel');
     panel.style.display = 'flex';
-    if (localStorage.getItem(ADMIN_AUTH_KEY) !== '1') {
+    if (!_adminSessionValid()) {
       const ov = document.getElementById('adminLoginOverlay');
       ov.style.display = 'flex';
       setTimeout(() => document.getElementById('adminPassInput').focus(), 100);
@@ -2178,10 +2290,12 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     document.getElementById('adminPanel').style.display = 'none';
   }
 
-  function checkAdminLogin() {
+  async function checkAdminLogin() {
     const val = document.getElementById('adminPassInput').value;
-    if (val === ADMIN_PASS) {
-      localStorage.setItem(ADMIN_AUTH_KEY, '1');
+    const h = await _adminHashPass(val);
+    const expected = await _adminHashPass(ADMIN_PASS);
+    if (h === expected) {
+      localStorage.setItem(ADMIN_AUTH_KEY, h + ':' + Date.now());
       document.getElementById('adminLoginOverlay').style.display = 'none';
       document.getElementById('adminPassInput').value = '';
       loadAdminReports();
