@@ -2229,15 +2229,15 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     return items.map((item, idx) => {
       const url = _getPreviewUrl(item.file);
       const safeKey = key.replace(/'/g, "\\'");
-      // long press: 500ms
       return `<div class="preview-thumb"
-        onmousedown="startPreviewPress(event,'${safeKey}',${idx})"
-        onmouseup="cancelPreviewPress(event)"
-        onmouseleave="cancelPreviewPress(event)"
-        ontouchstart="startPreviewPress(event,'${safeKey}',${idx})"
-        ontouchend="cancelPreviewPress(event)"
-        ontouchcancel="cancelPreviewPress(event)">
-        <img src="${url}">
+        onmousedown="startPreviewPress(this,'${safeKey}',${idx})"
+        onmouseup="cancelPreviewPress(this)"
+        onmouseleave="cancelPreviewPress(this)"
+        ontouchstart="startPreviewPress(this,'${safeKey}',${idx});event.preventDefault()"
+        ontouchend="cancelPreviewPress(this)"
+        ontouchcancel="cancelPreviewPress(this)"
+        oncontextmenu="event.preventDefault()">
+        <img src="${url}" draggable="false">
         <div class="press-ring"></div>
       </div>`;
     }).join('');
@@ -2246,11 +2246,10 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   let _pressTimer = null;
   let _pressEl = null;
 
-  function startPreviewPress(e, key, idx) {
-    e.preventDefault();
+  function startPreviewPress(el, key, idx) {
     if (_pressTimer) clearTimeout(_pressTimer);
-    _pressEl = e.currentTarget;
-    _pressEl.classList.add('pressing');
+    _pressEl = el;
+    el.classList.add('pressing');
     _pressTimer = setTimeout(() => {
       _pressTimer = null;
       if (_pressEl) { _pressEl.classList.remove('pressing'); _pressEl = null; }
@@ -2258,7 +2257,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     }, 500);
   }
 
-  function cancelPreviewPress(e) {
+  function cancelPreviewPress(el) {
     if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
     if (_pressEl) { _pressEl.classList.remove('pressing'); _pressEl = null; }
   }
