@@ -2,7 +2,7 @@
 <html dir="rtl" lang="he">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://docs.opencv.org https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://huggingface.co https://*.hf.co; connect-src 'self' https://api.emailjs.com https://api.telegram.org https://huggingface.co https://*.hf.co https://omer4561.github.io https://generativelanguage.googleapis.com; worker-src 'self'; frame-ancestors 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://docs.opencv.org https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://huggingface.co https://*.hf.co; connect-src 'self' https://api.emailjs.com https://api.telegram.org https://huggingface.co https://*.hf.co https://omer4561.github.io https://generativelanguage.googleapis.com https://api-inference.huggingface.co; worker-src 'self'; frame-ancestors 'none';">
   <meta http-equiv="X-Frame-Options" content="DENY">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
@@ -1428,7 +1428,12 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
 אם שני המקומות שונים — העדף מקום 1.
 שם חייב להכיל לפחות 2 אותיות עברית בכל מילה ולפחות 2 מילים. אם רק ריבוע אחד מולא — null.
 
-שדה שלא נמצא בבירור = null. עדיף null נכון על פני ערך שגוי.`;
+שדה שלא נמצא בבירור = null. עדיף null נכון על פני ערך שגוי.
+
+─── פורמט פלט JSON ───
+החזר תגובה בדיוק בפורמט זה, **בלי טקסט נוסף**, **בלי markdown**, **בלי קוד תיקייה**:
+{"date_day": <number or null>, "date_month": <number or null>, "date_year": <number or null>, "date_raw": "<string or null>", "license_plate": "<string or null>", "driver_name": "<string or null>"}
+`;
 
   function _makeRetryPrompt(missing) {
     const lines = ['בדוק שוב בכל הטופס. לא נמצאו:'];
@@ -1444,6 +1449,63 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     'gemini-2.5-pro',          // ראשי — Pro, דיוק מקסימלי
     'gemini-2.5-flash'         // fallback — Flash, תומך JSON schema
   ];
+
+  // Qwen2 VL 7B דרך HuggingFace Inference API
+  async function _callQwenRaw(parts) {
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') throw new Error('HF_TOKEN לא זמין');
+
+    const content = [];
+    for (const p of parts) {
+      if (p.inlineData) {
+        content.push({ type: 'image_url', image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` } });
+      } else if (p.text) {
+        content.push({ type: 'text', text: p.text });
+      }
+    }
+
+    const resp = await fetch(
+      'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'Qwen/Qwen2-VL-7B-Instruct',
+          messages: [{ role: 'user', content }],
+          max_tokens: 512
+        })
+      }
+    );
+    if (!resp.ok) {
+      const t = await resp.text();
+      console.error(`🔴 Qwen ${resp.status}:`, t);
+      throw new Error(`Qwen ${resp.status}: ${t.slice(0, 100)}`);
+    }
+    const json = await resp.json();
+    console.log(`🟢 Qwen raw response:`, json);
+    const text = (json.choices?.[0]?.message?.content || '').trim();
+    console.log(`🔵 Extracted text from Qwen:`, text);
+
+    const cleaned = text.replace(/^```json\s*/i,'').replace(/```\s*$/,'').replace(/^json\s+/i,'').trim();
+    try {
+      const parsed = JSON.parse(cleaned);
+      console.log(`✅ Parsed JSON from Qwen:`, parsed);
+      return parsed;
+    } catch(e) {
+      console.warn(`⚠️ Qwen parse attempt 1 failed:`, e.message);
+    }
+    const start = cleaned.indexOf('{'), end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        const parsed = JSON.parse(cleaned.slice(start, end+1));
+        console.log(`✅ Recovered JSON from Qwen via slice:`, parsed);
+        return parsed;
+      } catch(e) {
+        console.warn(`⚠️ Qwen slice parse failed:`, e.message);
+      }
+    }
+    console.log(`❌ Qwen full response:`, text);
+    throw new Error('Qwen: תגובה לא תקינה — ' + text.slice(0, 200));
+  }
 
   async function _callGeminiRaw(parts, useSchema) {
     let lastErr;
@@ -1643,6 +1705,51 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     return result;
   }
 
+  async function _callQwen(parts, onProg) {
+    onProg?.(30, '🤖 Qwen מנתח...');
+    let raw;
+    try {
+      raw = await _callQwenRaw(parts);
+    } catch(e) {
+      console.error('💥 Qwen error:', e);
+      throw e;
+    }
+    const result = _normalizeResult(raw);
+    onProg?.(80, '🤖 בודק שדות חסרים...');
+
+    // retry ממוקד על שדות חסרים
+    const imgParts = parts.filter(p => p.inlineData);
+    const missing  = ['date','license_plate','driver_name'].filter(k => !result[k]);
+    if (missing.length && imgParts.length) {
+      try {
+        const r2 = _normalizeResult(await _callQwenRaw(
+          [{ text: _makeRetryPrompt(missing) }, ...imgParts]
+        ));
+        result.date          = result.date          || r2.date;
+        result.license_plate = result.license_plate || r2.license_plate;
+        result.driver_name   = result.driver_name   || r2.driver_name;
+        if (r2._debug) result._debug = r2._debug;
+      } catch(e) {}
+    }
+
+    // retry ייעודי לתאריך — עד 3 ניסיונות נוספים
+    for (let attempt = 1; attempt <= 3 && !result.date && imgParts.length; attempt++) {
+      onProg?.(80 + attempt * 4, `⚠️ תאריך לא תקין — ניסיון ${attempt + 1}...`);
+      try {
+        const rDate = _normalizeResult(await _callQwenRaw(
+          [{ text: _DATE_FOCUS_PROMPT }, ...imgParts]
+        ));
+        if (rDate.date) {
+          result.date   = rDate.date;
+          result._debug = rDate._debug;
+        }
+      } catch(e) {}
+    }
+
+    onProg?.(95, '🤖 סיים');
+    return result;
+  }
+
   async function analyzeWithGemini(file, onProg) {
     // שלב 1: יישור מסמך לפני שליחה לגמיני
     try {
@@ -1679,6 +1786,40 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     return _callGemini(parts, onProg);
   }
 
+  async function analyzeWithQwen(file, onProg) {
+    try {
+      console.log('🔵 analyzeWithQwen - input file:', file.name, 'size:', file.size, 'type:', file.type);
+      onProg?.(5, '📐 מיישר מסמך...');
+      const aligned = await (_ocrEngine?.deskewFile(file) ?? Promise.resolve(file));
+      console.log('✅ Deskew done:', aligned.name, 'size:', aligned.size);
+      onProg?.(10, '🤖 שולח ל-Qwen...');
+      const compressed = await compressForUpload(aligned, 2500, 0.95);
+      console.log('✅ Compression done, size:', compressed.size);
+      const base64 = await fileToBase64(compressed);
+      console.log('✅ Base64 conversion done, length:', base64.length);
+      return _callQwen([
+        { text: _GEMINI_PROMPT },
+        { inlineData: { mimeType: 'image/jpeg', data: base64 } }
+      ], onProg);
+    } catch(e) {
+      console.error('❌ analyzeWithQwen error:', e);
+      throw e;
+    }
+  }
+
+  async function analyzeWithQwenMulti(files, onProg) {
+    onProg?.(5, '📐 מיישר מסמכים...');
+    const parts = [{ text: _GEMINI_PROMPT }];
+    for (const file of files) {
+      const aligned = await (_ocrEngine?.deskewFile(file) ?? Promise.resolve(file));
+      const compressed = await compressForUpload(aligned, 2500, 0.95);
+      const base64 = await fileToBase64(compressed);
+      parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
+    }
+    onProg?.(10, '🤖 שולח ל-Qwen (כל העמודים)...');
+    return _callQwen(parts, onProg);
+  }
+
   // ===================== OCR ENGINE (מובנה, ללא הורדות) =====================
   const MAX_SIZE = 100 * 1024 * 1024;
   let selectedFiles = [];
@@ -1691,9 +1832,11 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     const ws = document.getElementById('workerStatus');
 
     // אם יש Gemini — מוכנים מיד (OCR מקומי הוא גיבוי בלבד)
-    if (geminiKey) {
+    const hfTokenValid = HF_TOKEN && HF_TOKEN !== '__HF_TOKEN__';
+    if (hfTokenValid || geminiKey) {
       workerReady = true;
-      ws.textContent = '✅ Gemini AI מוכן';
+      const engine = hfTokenValid ? 'Qwen2 VL' : 'Gemini AI';
+      ws.textContent = `✅ ${engine} מוכן`;
       ws.className = 'worker-status ready';
       setTimeout(() => ws.style.display = 'none', 2000);
       // OCR מקומי בונה ברקע בשקט
@@ -2246,17 +2389,37 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
 
     const results = [], errors = [];
 
-    // אם יש Gemini ו-2+ עמודים — שלח הכל בקריאה אחת לדיוק מקסימלי
-    let _multiGeminiResult = null;
-    if (geminiKey && selectedFiles.length > 1) {
+    // אם יש 2+ עמודים — spoon הכל בקריאה אחת לדיוק מקסימלי
+    // ראשי: Qwen (אם HF_TOKEN), fallback: Gemini
+    let _multiResult = null;
+    const hfTokenValid = HF_TOKEN && HF_TOKEN !== '__HF_TOKEN__';
+    if (selectedFiles.length > 1 && (hfTokenValid || geminiKey)) {
       try {
-        selectedFiles.forEach((_, i) => setProgress(i, 10, '🤖 שולח ל-Gemini (כל העמודים)...'));
-        _multiGeminiResult = await analyzeWithGeminiMulti(selectedFiles, () => {});
-        selectedFiles.forEach((_, i) => setProgress(i, 100, '✅ Gemini AI (רב-עמודי)'));
-      } catch(e) {
-        console.error('Gemini multi error:', e);
-        selectedFiles.forEach((_, i) => setProgress(i, 0, `⚠️ ${e.message.slice(0,60)}`));
-        _multiGeminiResult = null;
+        if (hfTokenValid) {
+          selectedFiles.forEach((_, i) => setProgress(i, 10, '🤖 שולח ל-Qwen (כל העמודים)...'));
+          _multiResult = await analyzeWithQwenMulti(selectedFiles, () => {});
+          selectedFiles.forEach((_, i) => setProgress(i, 100, '✅ Qwen2 VL (רב-עמודי)'));
+        } else {
+          selectedFiles.forEach((_, i) => setProgress(i, 10, '🤖 שולח ל-Gemini (כל העמודים)...'));
+          _multiResult = await analyzeWithGeminiMulti(selectedFiles, () => {});
+          selectedFiles.forEach((_, i) => setProgress(i, 100, '✅ Gemini AI (רב-עמודי)'));
+        }
+      } catch(qwenErr) {
+        console.error('Multi AI error:', qwenErr);
+        if (hfTokenValid && geminiKey) {
+          try {
+            selectedFiles.forEach((_, i) => setProgress(i, 10, '⚠️ Qwen נכשל, עובר ל-Gemini...'));
+            _multiResult = await analyzeWithGeminiMulti(selectedFiles, () => {});
+            selectedFiles.forEach((_, i) => setProgress(i, 100, '✅ Gemini AI (fallback)'));
+          } catch(geminiErr) {
+            console.error('Gemini multi fallback error:', geminiErr);
+            selectedFiles.forEach((_, i) => setProgress(i, 0, `⚠️ ${geminiErr.message.slice(0,60)}`));
+            _multiResult = null;
+          }
+        } else {
+          selectedFiles.forEach((_, i) => setProgress(i, 0, `⚠️ ${qwenErr.message.slice(0,60)}`));
+          _multiResult = null;
+        }
       }
     }
 
@@ -2264,8 +2427,37 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
       const file = selectedFiles[i];
       try {
         let data;
-        if (_multiGeminiResult) {
-          data = _multiGeminiResult;
+        if (_multiResult) {
+          data = _multiResult;
+        } else if (hfTokenValid) {
+          try {
+            data = await analyzeWithQwen(file, (pct, msg) => setProgress(i, pct, msg));
+            setProgress(i, 100, '✅ Qwen2 VL');
+          } catch(qwenErr) {
+            console.error('Qwen error:', qwenErr);
+            if (geminiKey) {
+              try {
+                setProgress(i, 50, `⚠️ Qwen נכשל — עובר ל-Gemini`);
+                data = await analyzeWithGemini(file, (pct, msg) => setProgress(i, 50 + pct/2, msg));
+                setProgress(i, 100, '✅ Gemini (fallback)');
+              } catch(geminiErr) {
+                console.error('Gemini fallback error:', geminiErr);
+                if (_ocrEngine) {
+                  setProgress(i, 50, `⚠️ ${geminiErr.message.slice(0,60)} — עובר ל-OCR`);
+                  data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, 50 + pct/2, msg));
+                } else {
+                  setProgress(i, 100, `❌ ${geminiErr.message.slice(0,80)}`);
+                  data = { date: null, license_plate: null, driver_name: null };
+                }
+              }
+            } else if (_ocrEngine) {
+              setProgress(i, 50, `⚠️ ${qwenErr.message.slice(0,60)} — עובר ל-OCR`);
+              data = await _ocrEngine.analyzeImage(file, (pct, msg) => setProgress(i, 50 + pct/2, msg));
+            } else {
+              setProgress(i, 100, `❌ ${qwenErr.message.slice(0,80)}`);
+              data = { date: null, license_plate: null, driver_name: null };
+            }
+          }
         } else if (geminiKey) {
           try {
             data = await analyzeWithGemini(file, (pct, msg) => setProgress(i, pct, msg));
