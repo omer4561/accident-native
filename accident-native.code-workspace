@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "accident-native"
+    }
+  ],
+  "settings": {
+    "editor.defaultFormatter": null,
+    "[javascript]": {
+      "editor.defaultFormatter": null
+    },
+    "[html]": {
+      "editor.defaultFormatter": null
+    }
+  }
+}

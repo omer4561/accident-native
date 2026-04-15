@@ -71,7 +71,7 @@ jobs:
 
       - name: Generate or load keystore
         env:
-          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD || 'AccidentApp2025!' }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           if [ -f "accident-release.keystore" ]; then
             echo "Using existing keystore from repo"
@@ -96,7 +96,7 @@ jobs:
 
       - name: Patch build.gradle — SDK 35 + release signing
         env:
-          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD || 'AccidentApp2025!' }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           echo "=== build.gradle BEFORE patch ==="
           cat android/app/build.gradle
@@ -104,7 +104,7 @@ jobs:
           python3 << 'PYEOF'
           import re, os
 
-          ks_pass = os.environ.get('KS_PASS', 'AccidentApp2025!')
+          ks_pass = os.environ.get('KS_PASS', '')
 
           with open('android/app/build.gradle', 'r') as f:
               content = f.read()

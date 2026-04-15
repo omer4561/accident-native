@@ -2,6 +2,10 @@
 <html dir="rtl" lang="he">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://huggingface.co https://*.hf.co; connect-src 'self' https://huggingface.co https://*.hf.co https://omer4561.github.io; frame-ancestors 'none';">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -114,7 +118,7 @@
   const HF_REPO  = 'accident-reports';
   const HF_API   = `https://huggingface.co/api/datasets/${HF_OWNER}/${HF_REPO}`;
   const HF_FILES = `https://huggingface.co/datasets/${HF_OWNER}/${HF_REPO}/resolve/main`;
-  const ADMIN_PASS = 'admin2025';
+  const ADMIN_PASS_HASH = '__ADMIN_PASS_HASH__';  // מוחלף ב-build מ-secret ADMIN_PASS
   const AUTH_KEY  = 'admin_authed';
 
   async function hashPass(pass) {
@@ -123,7 +127,9 @@
   }
   function isSessionValid() {
     const v = localStorage.getItem(AUTH_KEY) || '';
-    const [, ts] = v.split(':');
+    const lastColon = v.lastIndexOf(':');
+    if (lastColon < 0) return false;
+    const ts = v.slice(lastColon + 1);
     return ts && (Date.now() - +ts < 8 * 3600 * 1000);
   }
 
@@ -132,11 +138,16 @@
   }
 
   async function checkLogin() {
+    if (!ADMIN_PASS_HASH || ADMIN_PASS_HASH === '__ADMIN_PASS_HASH__') {
+      document.getElementById('loginError').textContent = '❌ סיסמת מנהל לא הוגדרה — הוסף ADMIN_PASS ב-Secrets';
+      return;
+    }
     const val = document.getElementById('passInput').value;
     const h = await hashPass(val);
-    const expected = await hashPass(ADMIN_PASS);
-    if (h === expected) {
-      localStorage.setItem(AUTH_KEY, h + ':' + Date.now());
+    if (h === ADMIN_PASS_HASH) {
+      // session token אקראי — לא נגזר מהסיסמה
+      const sessionToken = crypto.randomUUID() + ':' + Date.now();
+      localStorage.setItem(AUTH_KEY, sessionToken);
       document.getElementById('loginOverlay').classList.remove('open');
       loadReports();
     } else {
@@ -268,9 +279,11 @@
     stats.textContent = `מציג ${reports.length} מתוך ${allReports.length} דוחות`;
 
     container.innerHTML = reports.map(meta => {
-      const imgs = (meta.urls || []).map((u, i) =>
-        `<img src="${u}" loading="lazy" alt="עמוד ${i+1}" onclick="openLightbox('${u.replace(/'/g,"\\'")}');event.stopPropagation()">`
-      ).join('');
+      const safeUrls = (meta.urls || []).filter(u => typeof u === 'string' && /^https:\/\/huggingface\.co\//.test(u));
+      const imgs = safeUrls.map((u, i) => {
+        const safeU = esc(u);
+        return `<img src="${safeU}" loading="lazy" alt="עמוד ${i+1}" onclick="openLightbox(this.src);event.stopPropagation()">`;
+      }).join('');
 
       const savedDate = meta.savedAt ? new Date(meta.savedAt).toLocaleString('he-IL') : '';
       const userInfo = allUsers[meta.userId] || {};

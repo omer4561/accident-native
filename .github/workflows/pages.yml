@@ -42,6 +42,12 @@ jobs:
           if [ -n "${{ secrets.EMAILJS_PUBLIC_KEY }}" ]; then
             sed -i "s|__EMAILJS_KEY__|${{ secrets.EMAILJS_PUBLIC_KEY }}|g" www/index.html
           fi
+          ADMIN_PASS="${{ secrets.ADMIN_PASS }}"
+          if [ -n "$ADMIN_PASS" ]; then
+            ADMIN_HASH=$(echo -n "${ADMIN_PASS}acc2025" | openssl dgst -sha256 -hex | cut -d' ' -f2)
+            sed -i "s|__ADMIN_PASS_HASH__|$ADMIN_HASH|g" www/index.html
+            sed -i "s|__ADMIN_PASS_HASH__|$ADMIN_HASH|g" www/admin.html
+          fi
           # שמור apk ו-apk_url מה-version.json הפרוס
           curl -sf "https://omer4561.github.io/accident-native/version.json" -o /tmp/v.json 2>/dev/null || echo '{}' > /tmp/v.json
           APK=$(python3 -c "import json; v=json.load(open('/tmp/v.json')); print(v.get('apk',0))" 2>/dev/null || echo 0)
