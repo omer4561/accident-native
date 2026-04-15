@@ -11,7 +11,7 @@
   },
   "plugins": {
     "Camera": {
-      "permissions": ["camera"]
+      "permissions": ["camera", "photos"]
     },
     "Filesystem": {
       "permissions": ["publicStorage"]
