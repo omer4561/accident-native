@@ -1702,21 +1702,45 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   // fetch(webPath) נכשל כשהדף נטען מ-GitHub Pages (cross-origin לcapacitor://)
   // Filesystem.readFile עם הנתיב המוחלט (photo.path) עובד תמיד
   async function capacitorPhotoToFile(absPath, name) {
-    const { Filesystem } = window.Capacitor.Plugins;
-    const { data } = await Filesystem.readFile({ path: absPath });
-    const blob = await fetch(`data:image/jpeg;base64,${data}`).then(r => r.blob());
-    return new File([blob], name, { type: 'image/jpeg' });
+    try {
+      console.log('📖 Reading file:', absPath);
+      const { Filesystem } = window.Capacitor.Plugins;
+      const { data } = await Filesystem.readFile({ path: absPath });
+      console.log('✅ File read, converting base64 to Blob...');
+      // Convert base64 to Blob (don't use fetch with data URI - it fails)
+      const binaryString = atob(data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'image/jpeg' });
+      console.log('✅ Blob created, size:', blob.size);
+      return new File([blob], name, { type: 'image/jpeg' });
+    } catch(e) {
+      console.error('❌ capacitorPhotoToFile error:', e);
+      throw e;
+    }
   }
 
   // ===================== GALLERY PICK =====================
   async function pickFromGallery() {
+    console.log('🔵 pickFromGallery called');
     if (!window.Capacitor?.isNativePlatform?.()) {
+      console.log('⚠️ Not native platform, using file input');
       document.getElementById('fileInput').click();
       return;
     }
     try {
+      console.log('📱 Native platform detected');
       const { Camera } = window.Capacitor.Plugins;
+      console.log('📷 Camera plugin:', Camera ? 'loaded' : 'not found');
+      if (!Camera) {
+        showToast('❌ Camera plugin not available');
+        return;
+      }
+      console.log('📸 Calling Camera.pickImages()...');
       const result = await Camera.pickImages({ quality: 85, width: 1920 });
+      console.log('✅ pickImages result:', result);
       for (const photo of result.photos) {
         const name = `gallery_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
         const file = await capacitorPhotoToFile(photo.path, name);
@@ -1724,6 +1748,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
       }
       updateUploadUI();
     } catch(e) {
+      console.error('❌ pickFromGallery error:', e);
       if (!e.message?.includes('cancelled') && !e.message?.includes('User cancelled')) showToast('❌ שגיאת גלריה: ' + e.message);
     }
   }
