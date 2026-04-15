@@ -563,19 +563,34 @@
   }
 
   async function compressForUpload(file, maxPx = 2500, quality = 0.95) {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       const img = new Image(), url = URL.createObjectURL(file);
+      console.log('🟡 compressForUpload - created object URL:', url);
       img.onload = () => {
-        URL.revokeObjectURL(url);
-        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-        const c = document.createElement('canvas');
-        c.width = Math.round(img.width * scale);
-        c.height = Math.round(img.height * scale);
-        const ctx = c.getContext('2d');
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        c.toBlob(b => resolve(b), 'image/jpeg', quality);
+        try {
+          console.log('✅ Image loaded:', img.width, 'x', img.height);
+          URL.revokeObjectURL(url);
+          const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.width * scale);
+          c.height = Math.round(img.height * scale);
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          console.log('✅ Canvas drawn, converting to blob...');
+          c.toBlob(b => {
+            console.log('✅ Blob created:', b.size);
+            resolve(b);
+          }, 'image/jpeg', quality);
+        } catch(e) {
+          console.error('❌ Compression error:', e);
+          reject(e);
+        }
       };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.onerror = (e) => {
+        console.error('❌ Image load error:', e);
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
       img.src = url;
     });
   }
@@ -1630,15 +1645,24 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
 
   async function analyzeWithGemini(file, onProg) {
     // שלב 1: יישור מסמך לפני שליחה לגמיני
-    onProg?.(5, '📐 מיישר מסמך...');
-    const aligned = await (_ocrEngine?.deskewFile(file) ?? Promise.resolve(file));
-    onProg?.(10, '🤖 שולח ל-Gemini...');
-    const compressed = await compressForUpload(aligned, 2500, 0.95);
-    const base64 = await fileToBase64(compressed);
-    return _callGemini([
-      { text: _GEMINI_PROMPT },
-      { inlineData: { mimeType: 'image/jpeg', data: base64 } }
-    ], onProg);
+    try {
+      console.log('🔵 analyzeWithGemini - input file:', file.name, 'size:', file.size, 'type:', file.type);
+      onProg?.(5, '📐 מיישר מסמך...');
+      const aligned = await (_ocrEngine?.deskewFile(file) ?? Promise.resolve(file));
+      console.log('✅ Deskew done:', aligned.name, 'size:', aligned.size);
+      onProg?.(10, '🤖 שולח ל-Gemini...');
+      const compressed = await compressForUpload(aligned, 2500, 0.95);
+      console.log('✅ Compression done, size:', compressed.size);
+      const base64 = await fileToBase64(compressed);
+      console.log('✅ Base64 conversion done, length:', base64.length);
+      return _callGemini([
+        { text: _GEMINI_PROMPT },
+        { inlineData: { mimeType: 'image/jpeg', data: base64 } }
+      ], onProg);
+    } catch(e) {
+      console.error('❌ analyzeWithGemini error:', e);
+      throw e;
+    }
   }
 
   async function analyzeWithGeminiMulti(files, onProg) {
