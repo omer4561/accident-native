@@ -2,12 +2,16 @@
 <html dir="rtl" lang="he">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://docs.opencv.org https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://huggingface.co https://*.hf.co; connect-src 'self' https://api.emailjs.com https://api.telegram.org https://huggingface.co https://*.hf.co https://omer4561.github.io; worker-src 'self'; frame-ancestors 'none';">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
   <script src="ocr-engine.js"></script>
-  <script>const APP_TS = 0; const APP_BUILD = 0; const GEMINI_KEY = ''; const HF_TOKEN = '__HF_TOKEN__';
+  <script>const APP_TS = 0; const APP_BUILD = 0; const GEMINI_KEY = 'AIzaSyBwCARpwThHo_wW7WM43xh3CQNGUqCdImw'; const HF_TOKEN = '__HF_TOKEN__';
     const TG_TOKEN = '__TG_TOKEN__'; const TG_CHANNEL = '__TG_CHANNEL__';
     const EMAILJS_SERVICE = 'service_bjqkxoi'; const EMAILJS_TEMPLATE = 'template_2omo9fg'; const EMAILJS_KEY = '__EMAILJS_KEY__';
   </script>
@@ -635,6 +639,11 @@
     el.style.display = msg ? 'block' : 'none';
   }
 
+  async function _hashOTP(code) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('otp:' + code));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
   async function sendOTP() {
     _regErr(1, '');
     const name = document.getElementById('regName').value.trim();
@@ -657,7 +666,8 @@
             template_params: { to_email: email, name: name, message: `קוד האימות שלך: ${code}\n\nהקוד בתוקף ל-10 דקות.`, time: new Date().toLocaleString('he-IL') } })
         });
         if (!res.ok) throw new Error(`EmailJS ${res.status}: ${await res.text()}`);
-        localStorage.setItem('pending_otp', JSON.stringify({ code, contact: email, name, expiry: Date.now() + 600000 }));
+        const codeHash = await _hashOTP(code);
+        localStorage.setItem('pending_otp', JSON.stringify({ codeHash, contact: email, name, expiry: Date.now() + 600000, tries: 0 }));
         document.getElementById('regSentMsg').innerHTML = `📧 קוד נשלח ל-<br><strong style="color:#1a73e8">${email}</strong><br><span style="font-size:12px;color:#888">בדוק תיבת דואר נכנס</span>`;
       } else {
         const phone = document.getElementById('regPhone').value.trim();
@@ -669,7 +679,8 @@
           body: JSON.stringify({ chat_id: TG_CHANNEL, text: msg, parse_mode: 'Markdown' })
         });
         if (!res.ok) throw new Error(`Telegram ${res.status}`);
-        localStorage.setItem('pending_otp', JSON.stringify({ code, contact: phone, name, expiry: Date.now() + 600000 }));
+        const codeHash = await _hashOTP(code);
+        localStorage.setItem('pending_otp', JSON.stringify({ codeHash, contact: phone, name, expiry: Date.now() + 600000, tries: 0 }));
         document.getElementById('regSentMsg').innerHTML = `📱 קוד נשלח למפקד<br><strong style="color:#1a73e8">${phone}</strong><br><span style="font-size:12px;color:#888">בקש מהמפקד את הקוד</span>`;
       }
       document.getElementById('regStep1').style.display = 'none';
@@ -680,13 +691,19 @@
     }
   }
 
-  function verifyOTP() {
+  async function verifyOTP() {
     _regErr(2, '');
     const entered = document.getElementById('regOTP').value.trim();
     const pending = JSON.parse(localStorage.getItem('pending_otp') || 'null');
     if (!pending) { _regErr(2, 'שלח קוד מחדש'); return; }
-    if (Date.now() > pending.expiry) { _regErr(2, 'הקוד פג תוקף — שלח מחדש'); return; }
-    if (entered !== pending.code) { _regErr(2, 'קוד שגוי — נסה שוב'); return; }
+    if (Date.now() > pending.expiry) { localStorage.removeItem('pending_otp'); _regErr(2, 'הקוד פג תוקף — שלח מחדש'); return; }
+
+    const tries = (pending.tries || 0) + 1;
+    if (tries > 5) { localStorage.removeItem('pending_otp'); _regErr(2, '⛔ יותר מדי ניסיונות — שלח קוד מחדש'); return; }
+    localStorage.setItem('pending_otp', JSON.stringify({ ...pending, tries }));
+
+    const enteredHash = await _hashOTP(entered);
+    if (enteredHash !== pending.codeHash) { _regErr(2, `קוד שגוי — נסה שוב (${5 - tries} נסיונות נותרו)`); return; }
 
     localStorage.removeItem('pending_otp');
     const profile = { name: pending.name, contact: pending.contact, registeredAt: Date.now(), userId };
@@ -749,7 +766,7 @@
       });
       const path = `data/${userId}/${reportId}_p${i+1}.jpg`;
       await hfCommit(path, b64, true);
-      hfUrls.push(`${HF_FILES}/${path}?token=${HF_TOKEN}`);
+      hfUrls.push(`${HF_FILES}/${path}`);
     }
 
     await hfCommit(`data/${userId}/${reportId}.json`, JSON.stringify({
@@ -1444,25 +1461,42 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
           }
           if (!resp.ok) {
             const t = await resp.text();
+            console.error(`🔴 Gemini ${model} error ${resp.status}:`, t);
             lastErr = new Error(`Gemini ${model} ${resp.status}: ${t.slice(0, 100)}`);
             break; // שגיאה אחרת — עבור למודל הבא
           }
           const json = await resp.json();
+          console.log(`🟢 Gemini ${model} raw response:`, json);
           const text = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+          console.log(`🔵 Extracted text from Gemini:`, text);
           // נקה prefixים שגמיני Pro מוסיף במצב free-text (thinking model)
           const cleaned = text
             .replace(/^```json\s*/i, '')
             .replace(/```\s*$/, '')
             .replace(/^json\s+/i, '')
             .trim();
-          try { return JSON.parse(cleaned); } catch(e) {}
+          try {
+            const parsed = JSON.parse(cleaned);
+            console.log(`✅ Parsed JSON:`, parsed);
+            return parsed;
+          } catch(e) {
+            console.warn(`⚠️ First parse attempt failed:`, e.message);
+          }
           const start = cleaned.indexOf('{'), end = cleaned.lastIndexOf('}');
           if (start !== -1 && end > start) {
-            try { return JSON.parse(cleaned.slice(start, end + 1)); } catch(e) {}
+            try {
+              const parsed = JSON.parse(cleaned.slice(start, end + 1));
+              console.log(`✅ Recovered JSON from slice:`, parsed);
+              return parsed;
+            } catch(e) {
+              console.warn(`⚠️ Slice parse attempt failed:`, e.message);
+            }
           }
+          console.log(`❌ Full response text:`, text);
           lastErr = new Error('Gemini: תגובה לא תקינה — ' + text.slice(0, 200));
           break;
         } catch(e) {
+          console.error(`💥 Network error in _callGeminiRaw:`, e);
           lastErr = e;
           break;
         }
@@ -2398,8 +2432,12 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   document.addEventListener('DOMContentLoaded', showRegistrationIfNeeded);
 
   // ===================== ADMIN PANEL =====================
-  const ADMIN_PASS = 'admin2025';
+  const ADMIN_PASS_HASH = '__ADMIN_PASS_HASH__';  // מוחלף ב-build מ-secret ADMIN_PASS
   const ADMIN_AUTH_KEY = 'admin_authed';
+
+  function _esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
 
   async function _adminHashPass(pass) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass + 'acc2025'));
@@ -2407,7 +2445,9 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   }
   function _adminSessionValid() {
     const v = localStorage.getItem(ADMIN_AUTH_KEY) || '';
-    const [, ts] = v.split(':');
+    const lastColon = v.lastIndexOf(':');
+    if (lastColon < 0) return false;
+    const ts = v.slice(lastColon + 1);
     return ts && (Date.now() - +ts < 8 * 3600 * 1000);
   }
 
@@ -2431,11 +2471,16 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   }
 
   async function checkAdminLogin() {
+    if (!ADMIN_PASS_HASH || ADMIN_PASS_HASH === '__ADMIN_PASS_HASH__') {
+      document.getElementById('adminLoginError').textContent = '❌ סיסמת מנהל לא הוגדרה — הוסף ADMIN_PASS ב-Secrets';
+      return;
+    }
     const val = document.getElementById('adminPassInput').value;
     const h = await _adminHashPass(val);
-    const expected = await _adminHashPass(ADMIN_PASS);
-    if (h === expected) {
-      localStorage.setItem(ADMIN_AUTH_KEY, h + ':' + Date.now());
+    if (h === ADMIN_PASS_HASH) {
+      // session token אקראי — לא נגזר מהסיסמה
+      const sessionToken = crypto.randomUUID() + ':' + Date.now();
+      localStorage.setItem(ADMIN_AUTH_KEY, sessionToken);
       document.getElementById('adminLoginOverlay').style.display = 'none';
       document.getElementById('adminPassInput').value = '';
       loadAdminReports();
@@ -2460,7 +2505,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   }
 
   async function _hfReadJson(p) {
-    const r = await fetch(`${HF_FILES}/${p}?token=${HF_TOKEN}`);
+    const r = await fetch(`${HF_FILES}/${p}`, { headers: { 'Authorization': `Bearer ${HF_TOKEN}` } });
     if (!r.ok) return null;
     return r.json();
   }
@@ -2513,17 +2558,19 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     document.getElementById('adminStatsBar').textContent = filtered.length ? `מציג ${filtered.length} מתוך ${_adminReports.length} דוחות` : '';
     if (!filtered.length) { container.innerHTML = '<div style="text-align:center;padding:48px;color:#aaa;grid-column:1/-1">📭 אין דוחות תואמים</div>'; return; }
     container.innerHTML = filtered.map(meta => {
-      const imgs = (meta.urls || []).map((u, i) =>
-        `<img src="${u}" loading="lazy" alt="עמוד ${i+1}" onclick="openAdminLightbox('${u.replace(/'/g,"\\'")}');event.stopPropagation()" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;cursor:pointer">`
-      ).join('');
+      const safeUrls = (meta.urls || []).filter(u => typeof u === 'string' && /^https:\/\/huggingface\.co\//.test(u));
+      const imgs = safeUrls.map((u, i) => {
+        const safeU = _esc(u);
+        return `<img src="${safeU}" loading="lazy" alt="עמוד ${i+1}" onclick="openAdminLightbox(this.src);event.stopPropagation()" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;cursor:pointer">`;
+      }).join('');
       const savedDate = meta.savedAt ? new Date(meta.savedAt).toLocaleString('he-IL') : '';
       return `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-          <span style="font-weight:bold;font-size:16px;color:#1a73e8">🚗 ${meta.plate || 'לא זוהה'}</span>
-          <span style="font-size:12px;color:#888">${savedDate}</span>
+          <span style="font-weight:bold;font-size:16px;color:#1a73e8">🚗 ${_esc(meta.plate) || 'לא זוהה'}</span>
+          <span style="font-size:12px;color:#888">${_esc(savedDate)}</span>
         </div>
-        <div style="font-size:13px;color:#555;margin-bottom:8px">📅 ${meta.date || 'ללא תאריך'} &nbsp; 👤 ${meta.driver || 'לא זוהה'}</div>
-        <div style="font-size:12px;background:#f8f9fa;border-radius:6px;padding:6px 8px;color:#444;margin-bottom:8px">👨‍💼 ${meta.userName || 'לא ידוע'} &nbsp;|&nbsp; 📞 ${meta.userContact || '—'}</div>
+        <div style="font-size:13px;color:#555;margin-bottom:8px">📅 ${_esc(meta.date) || 'ללא תאריך'} &nbsp; 👤 ${_esc(meta.driver) || 'לא זוהה'}</div>
+        <div style="font-size:12px;background:#f8f9fa;border-radius:6px;padding:6px 8px;color:#444;margin-bottom:8px">👨‍💼 ${_esc(meta.userName) || 'לא ידוע'} &nbsp;|&nbsp; 📞 ${_esc(meta.userContact) || '—'}</div>
         ${imgs ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px">${imgs}</div>` : '<div style="color:#aaa;font-size:12px">אין תמונות</div>'}
       </div>`;
     }).join('');
