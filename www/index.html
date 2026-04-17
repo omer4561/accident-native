@@ -11,9 +11,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
   <script src="ocr-engine.js"></script>
-  <script>const APP_TS = 1744761680; const APP_BUILD = 2; const GEMINI_KEY = 'AIzaSyBwCARpwThHo_wW7WM43xh3CQNGUqCdImw'; const HF_TOKEN = '__HF_TOKEN__';
-    const TG_TOKEN = '__TG_TOKEN__'; const TG_CHANNEL = '__TG_CHANNEL__';
-    const EMAILJS_SERVICE = 'service_bjqkxoi'; const EMAILJS_TEMPLATE = 'template_2omo9fg'; const EMAILJS_KEY = '__EMAILJS_KEY__';
+  <script>
+    const APP_TS = 1744761680;
+    const APP_BUILD = 2;
+    const GEMINI_KEY = 'AIzaSyBwCARpwThHo_wW7WM43xh3CQNGUqCdImw';
+    const HF_TOKEN = '__HF_TOKEN__';
+    const EMAILJS_SERVICE = 'service_bjqkxoi';
+    const EMAILJS_TEMPLATE = 'template_2omo9fg';
+    const EMAILJS_KEY = '__EMAILJS_KEY__';
+
+    // הכתובת של מודל Qwen בשרתי Hugging Face
+    const QWEN_MODEL_URL = 'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Instruct';
+
+    // פונקציה לשליחת בקשה למודל
+    async function askQwen(promptText) {
+        try {
+            const response = await fetch(QWEN_MODEL_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${HF_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    inputs: promptText,
+                    parameters: {
+                        max_new_tokens: 250,
+                        temperature: 0.7
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            return result[0].generated_text;
+
+        } catch (error) {
+            console.error("Error calling Qwen:", error);
+            return null;
+        }
+    }
   </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
