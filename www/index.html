@@ -578,7 +578,7 @@
 
   // GEMINI_KEY מוזרק בזמן בנייה מ-GitHub Secrets (APK)
   // localStorage מאפשר עקיפה ידנית (web / debug)
-  let geminiKey = localStorage.getItem('geminiKey') || (typeof GEMINI_KEY !== 'undefined' && GEMINI_KEY !== '__GEMINI_KEY__' ? GEMINI_KEY : '') || '';
+  let geminiKey = localStorage.getItem('geminiKey') || (typeof GEMINI_KEY !== 'undefined' ? GEMINI_KEY : '') || '';
 
   // ===================== HF + USER =====================
   const HF_OWNER = 'omer4561';
