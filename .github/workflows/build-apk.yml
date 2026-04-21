@@ -41,7 +41,7 @@ jobs:
           sed -i "s/const APP_TS = [0-9]*/const APP_TS = ${{ github.run_number }}/" www/index.html
           GKEY="${{ secrets.GEMINI_KEY }}"
           if [ -n "$GKEY" ]; then
-            sed -i "s|const GEMINI_KEY = ''|const GEMINI_KEY = '$GKEY'|" www/index.html
+            sed -i "s|__GEMINI_KEY__|$GKEY|g" www/index.html
           fi
           HF="${{ secrets.HF_TOKEN }}"
           if [ -n "$HF" ]; then

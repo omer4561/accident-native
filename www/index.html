@@ -1533,7 +1533,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
 
   // Qwen2 VL 7B דרך HuggingFace Inference API
   async function _callQwenRaw(parts) {
-    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') throw new Error('HF_TOKEN לא זמין');
+    if (!HF_TOKEN || HF_TOKEN === '__HF_TOKEN__') throw new Error('❌ HF_TOKEN missing — add to GitHub Secrets (HF_TOKEN)');
 
     const content = [];
     for (const p of parts) {
@@ -1607,7 +1607,7 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                systemInstruction: { parts: [{ text: 'אתה קורא מסמכים. כלל אחד בלבד: אם אינך רואה ערך כתוב בבירור בטופס — החזר null. אסור בהחלט להמציא, לנחש, לדמיין, או להסיק ערכים. עדיף null מאשר ערך שגוי.' }] },
+                systemInstruction: { parts: [{ text: '🚨 CRITICAL INSTRUCTION: You are reading military accident forms. Your ONLY job is EXACT EXTRACTION. If ANY field is NOT CLEARLY VISIBLE and LEGIBLE, return null. NEVER guess, invent, assume, infer, or hallucinate. NEVER. NULL is ALWAYS the right answer when text is not clear. Your response MUST be valid JSON matching the schema — no other output.' }] },
                 contents: [{ parts }],
                 generationConfig: genConfig
               })
@@ -1913,15 +1913,21 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   (async function initWorker() {
     const ws = document.getElementById('workerStatus');
 
-    // אם יש Gemini — מוכנים מיד (OCR מקומי הוא גיבוי בלבד)
     const hfTokenValid = HF_TOKEN && HF_TOKEN !== '__HF_TOKEN__';
-    if (hfTokenValid || geminiKey) {
+    const gkeyValid = geminiKey && geminiKey !== '__GEMINI_KEY__' && geminiKey.length > 10;
+
+    if (hfTokenValid) {
       workerReady = true;
-      const engine = hfTokenValid ? 'Qwen2 VL' : 'Gemini AI';
-      ws.textContent = `✅ ${engine} מוכן`;
+      ws.textContent = `✅ Qwen2 VL (HF) מוכן`;
       ws.className = 'worker-status ready';
       setTimeout(() => ws.style.display = 'none', 2000);
-      // OCR מקומי בונה ברקע בשקט
+      _ocrEngine?.init().catch(() => {});
+      return;
+    } else if (gkeyValid) {
+      workerReady = true;
+      ws.textContent = `✅ Gemini AI מוכן`;
+      ws.className = 'worker-status ready';
+      setTimeout(() => ws.style.display = 'none', 2000);
       _ocrEngine?.init().catch(() => {});
       return;
     }
