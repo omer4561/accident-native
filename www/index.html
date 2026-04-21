@@ -11,6 +11,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>דוחות תאונה</title>
   <script src="ocr-engine.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script>
     const APP_TS = 1744761680;
     const APP_BUILD = 118;
@@ -220,6 +222,13 @@
       transition: opacity 0.05s;
     }
     .preview-thumb.pressing .press-ring { opacity: 1; }
+    .preview-thumb.split-marker { border-top: 4px solid #e53935; }
+    .split-btn {
+      width: 100%; padding: 6px 8px; font-size: 11px; margin: 4px 0;
+      background: #fff3cd; border: 1px dashed #ffc107; border-radius: 4px;
+      color: #856404; cursor: pointer; text-align: center; font-weight: bold;
+    }
+    .split-btn:hover { background: #ffe69c; }
     .summary-bar { background: #e6f4ea; border-radius: 10px; padding: 12px 16px; text-align: center; font-size: 15px; font-weight: bold; color: #1e8e3e; margin-bottom: 12px; }
     .worker-status { font-size: 12px; color: #aaa; text-align: center; margin-bottom: 8px; }
     .worker-status.ready { color: #34a853; }
@@ -1125,7 +1134,12 @@
             const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
             const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
             const viewBtns = (r.files || []).map((path, i) => {
-              return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
+              const isPDF = path.endsWith('.pdf');
+              if (isPDF) {
+                return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();downloadFile('${path}')">📥 הוריד${r.files.length > 1 ? ' ('+i+1+')' : ''}</button>`;
+              } else {
+                return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
+              }
             }).join('');
             html += `<div class="report-item">
               <div class="ri-plate">🚗 ${plate}</div>
@@ -1167,7 +1181,12 @@
               const plate = r.plate === 'unknown' ? 'לוחית לא זוהתה' : r.plate;
               const files = r.files ? r.files.map(f => f.split('/').pop()).join(', ') : '';
               const viewBtns = (r.files || []).map((path, i) => {
-                return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
+                const isPDF = path.endsWith('.pdf');
+                if (isPDF) {
+                  return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();downloadFile('${path}')">📥 הוריד${r.files.length > 1 ? ' ('+i+1+')' : ''}</button>`;
+                } else {
+                  return `<button class="ri-btn" style="background:#e8f0fe;color:#1a73e8" onclick="event.stopPropagation();openFile(${r.id},${i})">🖼️ ${r.files.length > 1 ? 'עמוד '+(i+1) : 'פתח'}</button>`;
+                }
               }).join('');
               html += `<div class="report-item">
                 <div class="ri-plate">🚗 ${plate}</div>
@@ -1262,6 +1281,29 @@
     });
   })();
 
+  async function downloadFile(path) {
+    const filename = path.split('/').pop();
+    try {
+      if (window.Capacitor?.isNativePlatform?.()) {
+        const { Filesystem, Share } = window.Capacitor.Plugins;
+        const DIRS = ['DOWNLOADS', 'EXTERNAL', 'DATA'];
+        for (const dir of DIRS) {
+          try {
+            const uri = await Filesystem.getUri({ path, directory: dir });
+            await Share.share({ url: uri.uri, title: filename });
+            return;
+          } catch(e) {}
+        }
+        showToast('❌ לא היה אפשר למצוא את הקובץ');
+      } else {
+        showToast('❌ זמין רק באפליקציה');
+      }
+    } catch(e) {
+      console.error('Download error:', e);
+      showToast('❌ ' + e.message);
+    }
+  }
+
   async function openFile(id, idx) {
     const r = history.find(x => x.id === id);
     if (!r || !r.files || !r.files[idx]) return;
@@ -1348,7 +1390,7 @@
 
       // שמור קובץ מאוחד
       const plate = r.plate || 'unknown';
-      const filename = `${plate}_${r.date || 'no_date'}_merged.jpg`.replace(/[\/\\:*?"<>|]/g, '_');
+      const filename = `${plate}_${r.date || 'no_date'}_merged.pdf`.replace(/[\/\\:*?"<>|]/g, '_');
       let saveResult = null;
       for (const dir of DIRS) {
         try {
@@ -2193,41 +2235,53 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
   }
 
   function buildFilename(data, pageNum, multiPage, ext) {
-    const plate = (data.license_plate || 'unknown_plate').replace(/[^a-zA-Z0-9\-]/g, '_');
+    const plate = (data.license_plate || 'unknown').replace(/[^a-zA-Z0-9]/g, '');
     let dateStr = 'no_date';
     if (data.date) {
-      // תומך בכל הפורמטים: DD.MM.YY, DD/MM/YYYY, YYYY-MM-DD
       const norm = data.date.trim().replace(/[-\/]/g, '.');
       dateStr = norm.replace(/\./g, '_');
     }
-    return `${plate}_${dateStr}${multiPage ? `_p${pageNum}` : ''}${ext}`;
+    let driverStr = 'unknown';
+    if (data.driver_name) {
+      const s = String(data.driver_name).trim();
+      let ascii = s.replace(/[^a-zA-Z0-9\s]/g, '');
+      ascii = ascii.replace(/\s+/g, '_');
+      driverStr = ascii.slice(0, 30) || 'unknown';
+    }
+    return `${dateStr}_${driverStr}_${plate}${multiPage ? `_p${pageNum}` : ''}${ext}`;
   }
 
-  // ===================== MERGE PAGES (canvas — לשימוש ב-mergeHistoryReport בלבד) =====================
+  // ===================== MERGE PAGES → PDF =====================
   async function mergePages(files) {
     if (files.length === 1) return files[0];
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
     const dataUrls = await Promise.all(files.map(f => new Promise((res, rej) => {
       const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(f);
     })));
+
     const imgs = await Promise.all(dataUrls.map(src => new Promise((res, rej) => {
       const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = src;
     })));
-    const MAX_W = 1920;
-    const maxW = Math.min(Math.max(...imgs.map(im => im.naturalWidth)), MAX_W);
-    const totalH = imgs.reduce((s, im) => s + Math.round(im.naturalHeight * maxW / im.naturalWidth), 0);
-    const c = document.createElement('canvas');
-    c.width = maxW; c.height = totalH;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, maxW, totalH);
-    let y = 0;
-    for (const im of imgs) {
-      const h = Math.round(im.naturalHeight * maxW / im.naturalWidth);
-      ctx.drawImage(im, 0, y, maxW, h); y += h;
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    for (let i = 0; i < imgs.length; i++) {
+      if (i > 0) pdf.addPage();
+      const img = imgs[i];
+      const ratio = img.naturalHeight / img.naturalWidth;
+      let w = pageWidth - 4;
+      let h = w * ratio;
+      if (h > pageHeight - 4) { h = pageHeight - 4; w = h / ratio; }
+      const x = (pageWidth - w) / 2;
+      pdf.addImage(dataUrls[i], 'JPEG', x, 2, w, h);
     }
-    const b64 = c.toDataURL('image/jpeg', 0.92).split(',')[1];
-    const bin = atob(b64); const arr = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    return new File([arr.buffer], 'merged.jpg', { type: 'image/jpeg' });
+
+    const pdfBlob = pdf.output('blob');
+    return new File([pdfBlob], 'merged.pdf', { type: 'application/pdf' });
   }
 
   // ===================== FILE SAVE =====================
@@ -2541,10 +2595,10 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
 
   function buildPreviewGrid(key, items) {
     if (!items.length) return '';
-    return items.map((item, idx) => {
+    const safeKey = key.replace(/'/g, "\\'");
+    const thumbs = items.map((item, idx) => {
       const url = _getPreviewUrl(item.file);
-      const safeKey = key.replace(/'/g, "\\'");
-      return `<div class="preview-thumb"
+      return `<div class="preview-thumb" id="thumb_${safeKey}_${idx}"
         onmousedown="startPreviewPress(this,'${safeKey}',${idx})"
         onmouseup="cancelPreviewPress(this)"
         onmouseleave="cancelPreviewPress(this)"
@@ -2554,8 +2608,19 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
         oncontextmenu="event.preventDefault()">
         <img src="${url}" draggable="false">
         <div class="press-ring"></div>
-      </div>`;
+      </div>
+      ${idx < items.length - 1 ? `<button class="split-btn" onclick="toggleSplit('${safeKey}',${idx})">🔀 פצל כאן</button>` : ''}`;
     }).join('');
+    return thumbs;
+  }
+
+  window._splits = {};
+  function toggleSplit(key, idx) {
+    if (!window._splits[key]) window._splits[key] = new Set();
+    const splits = window._splits[key];
+    if (splits.has(idx)) { splits.delete(idx); } else { splits.add(idx); }
+    const thumb = document.getElementById(`thumb_${key}_${idx}`);
+    if (thumb) thumb.classList.toggle('split-marker', splits.has(idx));
   }
 
   let _pressTimer = null;
@@ -2647,8 +2712,21 @@ driver_name: חפש **בחלק א** ב-2 מקומות בלבד, עבור על ש
     document.getElementById('summaryBar').textContent =
       `✅ עובדו ${results.length} קבצים${errors.length ? ` | ❌ ${errors.length} נכשלו` : ''}`;
 
-    // כל הקבצים שהועלו יחד = קבוצה אחת (דוח אחד עם כמה עמודים)
-    const groups = { 'report__0': results };
+    // בנה groups לפי split points שנבחרו
+    const groups = {};
+    const splits = window._splits['report__0'] || new Set();
+    let groupNum = 0;
+    let currentGroup = [];
+
+    for (let i = 0; i < results.length; i++) {
+      currentGroup.push(results[i]);
+      if (splits.has(i) || i === results.length - 1) {
+        const groupKey = `report__${groupNum}`;
+        groups[groupKey] = currentGroup;
+        groupNum++;
+        currentGroup = [];
+      }
+    }
 
     window.groupsData = {};
     for (const [key, items] of Object.entries(groups)) {
