@@ -42,10 +42,16 @@ jobs:
           GKEY="${{ secrets.GEMINI_KEY }}"
           if [ -n "$GKEY" ]; then
             sed -i "s|__GEMINI_KEY__|$GKEY|g" www/index.html
+            echo "✅ GEMINI_KEY replaced"
+          else
+            echo "⚠️ GEMINI_KEY not set in secrets"
           fi
           HF="${{ secrets.HF_TOKEN }}"
           if [ -n "$HF" ]; then
             sed -i "s|__HF_TOKEN__|$HF|g" www/index.html
+            echo "✅ HF_TOKEN replaced (${#HF} chars)"
+          else
+            echo "❌ HF_TOKEN not set in secrets!"
           fi
           sed -i "s|__TG_TOKEN__|${{ secrets.TELEGRAM_TOKEN }}|g" www/index.html
           sed -i "s|__TG_CHANNEL__|${{ secrets.CHANNEL_ID }}|g" www/index.html
@@ -54,7 +60,8 @@ jobs:
             sed -i "s|__EMAILJS_TEMPLATE__|${{ secrets.EMAILJS_TEMPLATE_ID }}|g" www/index.html
             sed -i "s|__EMAILJS_KEY__|${{ secrets.EMAILJS_PUBLIC_KEY }}|g" www/index.html
           fi
-          echo "APP_BUILD=${{ github.run_number }}, APP_TS=${{ github.run_number }}"
+          echo "Build: ${{ github.run_number }}"
+          grep "const HF_TOKEN" www/index.html | head -c 100
 
       - name: Download Tesseract.js files (offline bundle)
         run: |
