@@ -1,7 +1,7 @@
 {
-  "name": "accident-reporter",
+  "name": "fitness-system",
   "version": "1.0.0",
-  "description": "מיון דוחות תאונה צבאיים",
+  "description": "מערכת כושר אישית עם 10 מאמנים",
   "main": "index.js",
   "scripts": {
     "build": "echo build done"

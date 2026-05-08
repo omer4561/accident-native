@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#667eea">
+  <title>מערכת כושר</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .app-container {
+      background: white;
+      border-radius: 20px;
+      max-width: 500px;
+      width: 100%;
+      height: 100vh;
+      max-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      position: relative;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    .back-btn {
+      position: absolute;
+      left: 20px;
+      top: 20px;
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .back-btn:active {
+      background: rgba(255,255,255,0.4);
+    }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .card {
+      background: #f9f9f9;
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .card h2 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 20px;
+    }
+
+    .card p {
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      color: #333;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .gender-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .gender-buttons .btn {
+      flex: 1;
+      margin: 0;
+    }
+
+    .coaches-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .coach-card {
+      background: white;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 15px;
+      text-align: right;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .coach-card:active {
+      border-color: #667eea;
+      background: #f0f4ff;
+    }
+
+    .coach-card.active {
+      border-color: #667eea;
+      background: #f0f4ff;
+    }
+
+    .coach-name {
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 5px;
+    }
+
+    .coach-style {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:active {
+      background: #5568d3;
+      transform: scale(0.98);
+    }
+
+    .btn-secondary {
+      background: #764ba2;
+      color: white;
+    }
+
+    .btn-secondary:active {
+      background: #673a8a;
+      transform: scale(0.98);
+    }
+
+    .features {
+      margin-top: 20px;
+    }
+
+    .features h3 {
+      color: #667eea;
+      margin-bottom: 12px;
+    }
+
+    .feature {
+      background: white;
+      padding: 12px;
+      margin-bottom: 8px;
+      border-radius: 8px;
+      color: #555;
+      font-size: 14px;
+    }
+
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .result-item .label {
+      color: #888;
+      font-size: 14px;
+    }
+
+    .result-item .value {
+      font-weight: bold;
+      color: #333;
+    }
+
+    .message-box {
+      background: #e3f2fd;
+      border-left: 4px solid #2196F3;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      color: #1565c0;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 480px) {
+      .header h1 {
+        font-size: 24px;
+      }
+
+      .content {
+        padding: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <script src="fitness-app.js"></script>
+</body>
+</html>

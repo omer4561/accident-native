@@ -1,9 +1,9 @@
 {
-  "appId": "com.accidentreporter.app",
-  "appName": "דוחות תאונה",
+  "appId": "com.fitnesssystem.app",
+  "appName": "מערכת כושר",
   "webDir": "www",
   "server": {
-    "url": "https://omer4561.github.io/accident-native",
+    "url": "https://omer4561.github.io/FitnessSystem",
     "cleartext": false
   },
   "android": {
